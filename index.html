@@ -405,6 +405,7 @@
     let selectedChipDeposit = 1;
     let selectedStationId = null;
     let selectedChallengeId = null;
+    let floatingChallengeMarkers = {}; // Tracks custom coordinate challenges
 
     // Master state object synced with Firebase
     let gameState = {
@@ -485,190 +486,190 @@
        ========================================================================= */
     const LINES_DATA = {
       "Tuen Ma Line": { color: "#920783", stations: [
-        { id: "TM-01", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
-        { id: "TM-02", name: "Siu Hong", lat: 22.4116, lng: 113.9782 },
-        { id: "TM-03", name: "Tin Shui Wai", lat: 22.4452, lng: 114.0026 },
-        { id: "TM-04", name: "Long Ping", lat: 22.4475, lng: 114.0252 },
-        { id: "TM-05", name: "Yuen Long", lat: 22.4451, lng: 114.0357 },
-        { id: "TM-06", name: "Kam Sheung Rd", lat: 22.4344, lng: 114.0655 },
-        { id: "TM-07", name: "Tsuen Wan West", lat: 22.3683, lng: 114.1114 },
-        { id: "TM-08", name: "Mei Foo", lat: 22.3369, lng: 114.1388 },
-        { id: "TM-09", name: "Nam Cheong", lat: 22.3256, lng: 114.1534 },
-        { id: "TM-10", name: "Austin", lat: 22.3050, lng: 114.1664 },
-        { id: "TM-11", name: "East TST", lat: 22.2969, lng: 114.1746 },
-        { id: "TM-12", name: "Hung Hom", lat: 22.3031, lng: 114.1818 },
-        { id: "TM-13", name: "Ho Man Tin", lat: 22.3094, lng: 114.1824 },
-        { id: "TM-14", name: "To Kwa Wan", lat: 22.3188, lng: 114.1882 },
-        { id: "TM-15", name: "Sung Wong Toi", lat: 22.3275, lng: 114.1888 },
-        { id: "TM-16", name: "Kai Tak", lat: 22.3312, lng: 114.1983 },
-        { id: "TM-17", name: "Diamond Hill", lat: 22.3400, lng: 114.2016 },
-        { id: "TM-18", name: "Hin Keng", lat: 22.3614, lng: 114.1728 },
-        { id: "TM-19", name: "Tai Wai", lat: 22.3727, lng: 114.1785 },
-        { id: "TM-20", name: "Che Kung Temple", lat: 22.3753, lng: 114.1862 },
-        { id: "TM-21", name: "Sha Tin Wai", lat: 22.3770, lng: 114.1952 },
-        { id: "TM-22", name: "City One", lat: 22.3833, lng: 114.2036 },
-        { id: "TM-23", name: "Shek Mun", lat: 22.3881, lng: 114.2082 },
-        { id: "TM-24", name: "Tai Shui Hang", lat: 22.4082, lng: 114.2216 },
-        { id: "TM-25", name: "Heng On", lat: 22.4182, lng: 114.2263 },
-        { id: "TM-26", name: "Ma On Shan", lat: 22.4255, lng: 114.2318 },
-        { id: "TM-27", name: "Wu Kai Sha", lat: 22.4285, lng: 114.2388 }
+        { id: "Tuen-Mun", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
+        { id: "Siu-Hong", name: "Siu Hong", lat: 22.4116, lng: 113.9782 },
+        { id: "Tin-Shui-Wai", name: "Tin Shui Wai", lat: 22.4452, lng: 114.0026 },
+        { id: "Long-Ping", name: "Long Ping", lat: 22.4475, lng: 114.0252 },
+        { id: "Yuen-Long", name: "Yuen Long", lat: 22.4451, lng: 114.0357 },
+        { id: "Kam-Sheung-Rd", name: "Kam Sheung Rd", lat: 22.4344, lng: 114.0655 },
+        { id: "Tsuen-Wan-West", name: "Tsuen Wan West", lat: 22.3683, lng: 114.1114 },
+        { id: "Mei-Foo", name: "Mei Foo", lat: 22.3369, lng: 114.1388 },
+        { id: "Nam-Cheong", name: "Nam Cheong", lat: 22.3256, lng: 114.1534 },
+        { id: "Austin", name: "Austin", lat: 22.3050, lng: 114.1664 },
+        { id: "East-TST", name: "East TST", lat: 22.2969, lng: 114.1746 },
+        { id: "Hung-Hom", name: "Hung Hom", lat: 22.3031, lng: 114.1818 },
+        { id: "Ho-Man-Tin", name: "Ho Man Tin", lat: 22.3094, lng: 114.1824 },
+        { id: "To-Kwa-Wan", name: "To Kwa Wan", lat: 22.3188, lng: 114.1882 },
+        { id: "Sung-Wong-Toi", name: "Sung Wong Toi", lat: 22.3275, lng: 114.1888 },
+        { id: "Kai-Tak", name: "Kai Tak", lat: 22.3312, lng: 114.1983 },
+        { id: "Diamond-Hill", name: "Diamond Hill", lat: 22.3400, lng: 114.2016 },
+        { id: "Hin-Keng", name: "Hin Keng", lat: 22.3614, lng: 114.1728 },
+        { id: "Tai-Wai", name: "Tai Wai", lat: 22.3727, lng: 114.1785 },
+        { id: "Che-Kung-Temple", name: "Che Kung Temple", lat: 22.3753, lng: 114.1862 },
+        { id: "Sha-Tin-Wai", name: "Sha Tin Wai", lat: 22.3770, lng: 114.1952 },
+        { id: "City-One", name: "City One", lat: 22.3833, lng: 114.2036 },
+        { id: "Shek-Mun", name: "Shek Mun", lat: 22.3881, lng: 114.2082 },
+        { id: "Tai-Shui-Hang", name: "Tai Shui Hang", lat: 22.4082, lng: 114.2216 },
+        { id: "Heng-On", name: "Heng On", lat: 22.4182, lng: 114.2263 },
+        { id: "Ma-On-Shan", name: "Ma On Shan", lat: 22.4255, lng: 114.2318 },
+        { id: "Wu-Kai-Sha", name: "Wu Kai Sha", lat: 22.4285, lng: 114.2388 }
       ]},
       "Tsuen Wan Line": { color: "#E60012", stations: [
-        { id: "TW-01", name: "Tsuen Wan", lat: 22.3737, lng: 114.1178 },
-        { id: "TW-02", name: "Tai Wo Hau", lat: 22.3708, lng: 114.1268 },
-        { id: "TW-03", name: "Kwai Hing", lat: 22.3631, lng: 114.1311 },
-        { id: "TW-04", name: "Kwai Fong", lat: 22.3575, lng: 114.1283 },
-        { id: "TW-05", name: "Lai King", lat: 22.3486, lng: 114.1272 },
-        { id: "TW-06", name: "Mei Foo", lat: 22.3369, lng: 114.1388 },
-        { id: "TW-07", name: "Lai Chi Kok", lat: 22.3364, lng: 114.1486 },
-        { id: "TW-08", name: "Cheung Sha Wan", lat: 22.3352, lng: 114.1561 },
-        { id: "TW-09", name: "Sham Shui Po", lat: 22.3308, lng: 114.1611 },
-        { id: "TW-10", name: "Prince Edward", lat: 22.3244, lng: 114.1683 },
-        { id: "TW-11", name: "Mong Kok", lat: 22.3193, lng: 114.1694 },
-        { id: "TW-12", name: "Yau Ma Tei", lat: 22.3131, lng: 114.1706 },
-        { id: "TW-13", name: "Jordan", lat: 22.3047, lng: 114.1717 },
-        { id: "TW-14", name: "Tsim Sha Tsui", lat: 22.2975, lng: 114.1722 },
-        { id: "TW-15", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
-        { id: "TW-16", name: "Central", lat: 22.2819, lng: 114.1582 }
+        { id: "Tsuen-Wan", name: "Tsuen Wan", lat: 22.3737, lng: 114.1178 },
+        { id: "Tai-Wo-Hau", name: "Tai Wo Hau", lat: 22.3708, lng: 114.1268 },
+        { id: "Kwai-Hing", name: "Kwai Hing", lat: 22.3631, lng: 114.1311 },
+        { id: "Kwai-Fong", name: "Kwai Fong", lat: 22.3575, lng: 114.1283 },
+        { id: "Lai-King", name: "Lai King", lat: 22.3486, lng: 114.1272 },
+        { id: "Mei-Foo", name: "Mei Foo", lat: 22.3369, lng: 114.1388 },
+        { id: "Lai-Chi-Kok", name: "Lai Chi Kok", lat: 22.3364, lng: 114.1486 },
+        { id: "Cheung-Sha-Wan", name: "Cheung Sha Wan", lat: 22.3352, lng: 114.1561 },
+        { id: "Sham-Shui-Po", name: "Sham Shui Po", lat: 22.3308, lng: 114.1611 },
+        { id: "Prince-Edward", name: "Prince Edward", lat: 22.3244, lng: 114.1683 },
+        { id: "Mong-Kok", name: "Mong Kok", lat: 22.3193, lng: 114.1694 },
+        { id: "Yau-Ma-Tei", name: "Yau Ma Tei", lat: 22.3131, lng: 114.1706 },
+        { id: "Jordan", name: "Jordan", lat: 22.3047, lng: 114.1717 },
+        { id: "Tsim-Sha-Tsui", name: "Tsim Sha Tsui", lat: 22.2975, lng: 114.1722 },
+        { id: "Admiralty", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "Central", name: "Central", lat: 22.2819, lng: 114.1582 }
       ]},
       "Kwun Tong Line": { color: "#00AB4E", stations: [
-        { id: "KT-01", name: "Whampoa", lat: 22.3049, lng: 114.1897 },
-        { id: "KT-02", name: "Ho Man Tin", lat: 22.3094, lng: 114.1824 },
-        { id: "KT-03", name: "Yau Ma Tei", lat: 22.3131, lng: 114.1706 },
-        { id: "KT-04", name: "Mong Kok", lat: 22.3193, lng: 114.1694 },
-        { id: "KT-05", name: "Prince Edward", lat: 22.3244, lng: 114.1683 },
-        { id: "KT-06", name: "Shek Kip Mei", lat: 22.3314, lng: 114.1689 },
-        { id: "KT-07", name: "Kowloon Tong", lat: 22.3370, lng: 114.1761 },
-        { id: "KT-08", name: "Lok Fu", lat: 22.3386, lng: 114.1869 },
-        { id: "KT-09", name: "Wong Tai Sin", lat: 22.3417, lng: 114.1953 },
-        { id: "KT-10", name: "Diamond Hill", lat: 22.3400, lng: 114.2016 },
-        { id: "KT-11", name: "Choi Hung", lat: 22.3347, lng: 114.2089 },
-        { id: "KT-12", name: "Kowloon Bay", lat: 22.3238, lng: 114.2142 },
-        { id: "KT-13", name: "Ngau Tau Kok", lat: 22.3153, lng: 114.2188 },
-        { id: "KT-14", name: "Kwun Tong", lat: 22.3125, lng: 114.2264 },
-        { id: "KT-15", name: "Lam Tin", lat: 22.3061, lng: 114.2333 },
-        { id: "KT-16", name: "Yau Tong", lat: 22.2978, lng: 114.2372 },
-        { id: "KT-17", name: "Tiu Keng Leng", lat: 22.3028, lng: 114.2528 }
+        { id: "Whampoa", name: "Whampoa", lat: 22.3049, lng: 114.1897 },
+        { id: "Ho-Man-Tin", name: "Ho Man Tin", lat: 22.3094, lng: 114.1824 },
+        { id: "Yau-Ma-Tei", name: "Yau Ma Tei", lat: 22.3131, lng: 114.1706 },
+        { id: "Mong-Kok", name: "Mong Kok", lat: 22.3193, lng: 114.1694 },
+        { id: "Prince-Edward", name: "Prince Edward", lat: 22.3244, lng: 114.1683 },
+        { id: "Shek-Kip-Mei", name: "Shek Kip Mei", lat: 22.3314, lng: 114.1689 },
+        { id: "Kowloon-Tong", name: "Kowloon Tong", lat: 22.3370, lng: 114.1761 },
+        { id: "Lok-Fu", name: "Lok Fu", lat: 22.3386, lng: 114.1869 },
+        { id: "Wong-Tai-Sin", name: "Wong Tai Sin", lat: 22.3417, lng: 114.1953 },
+        { id: "Diamond-Hill", name: "Diamond Hill", lat: 22.3400, lng: 114.2016 },
+        { id: "Choi-Hung", name: "Choi Hung", lat: 22.3347, lng: 114.2089 },
+        { id: "Kowloon-Bay", name: "Kowloon Bay", lat: 22.3238, lng: 114.2142 },
+        { id: "Ngau-Tau-Kok", name: "Ngau Tau Kok", lat: 22.3153, lng: 114.2188 },
+        { id: "Kwun-Tong", name: "Kwun Tong", lat: 22.3125, lng: 114.2264 },
+        { id: "Lam-Tin", name: "Lam Tin", lat: 22.3061, lng: 114.2333 },
+        { id: "Yau-Tong", name: "Yau Tong", lat: 22.2978, lng: 114.2372 },
+        { id: "Tiu-Keng-Leng", name: "Tiu Keng Leng", lat: 22.3028, lng: 114.2528 }
       ]},
       "Island Line": { color: "#007DC3", stations: [
-        { id: "IS-01", name: "Kennedy Town", lat: 22.2814, lng: 114.1286 },
-        { id: "IS-02", name: "HKU", lat: 22.2842, lng: 114.1350 },
-        { id: "IS-03", name: "Sai Ying Pun", lat: 22.2861, lng: 114.1428 },
-        { id: "IS-04", name: "Sheung Wan", lat: 22.2867, lng: 114.1522 },
-        { id: "IS-05", name: "Central", lat: 22.2819, lng: 114.1582 },
-        { id: "IS-06", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
-        { id: "IS-07", name: "Wan Chai", lat: 22.2778, lng: 114.1731 },
-        { id: "IS-08", name: "Causeway Bay", lat: 22.2803, lng: 114.1850 },
-        { id: "IS-09", name: "Tin Hau", lat: 22.2822, lng: 114.1917 },
-        { id: "IS-10", name: "Fortress Hill", lat: 22.2883, lng: 114.1936 },
-        { id: "IS-11", name: "North Point", lat: 22.2911, lng: 114.2006 },
-        { id: "IS-12", name: "Quarry Bay", lat: 22.2881, lng: 114.2097 },
-        { id: "IS-13", name: "Tai Koo", lat: 22.2847, lng: 114.2161 },
-        { id: "IS-14", name: "Sai Wan Ho", lat: 22.2822, lng: 114.2222 },
-        { id: "IS-15", name: "Shau Kei Wan", lat: 22.2794, lng: 114.2286 },
-        { id: "IS-16", name: "Heng Fa Chuen", lat: 22.2764, lng: 114.2400 },
-        { id: "IS-17", name: "Chai Wan", lat: 22.2647, lng: 114.2367 }
+        { id: "Kennedy-Town", name: "Kennedy Town", lat: 22.2814, lng: 114.1286 },
+        { id: "HKU", name: "HKU", lat: 22.2842, lng: 114.1350 },
+        { id: "Sai-Ying-Pun", name: "Sai Ying Pun", lat: 22.2861, lng: 114.1428 },
+        { id: "Sheung-Wan", name: "Sheung Wan", lat: 22.2867, lng: 114.1522 },
+        { id: "Central", name: "Central", lat: 22.2819, lng: 114.1582 },
+        { id: "Admiralty", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "Wan-Chai", name: "Wan Chai", lat: 22.2778, lng: 114.1731 },
+        { id: "Causeway-Bay", name: "Causeway Bay", lat: 22.2803, lng: 114.1850 },
+        { id: "Tin-Hau", name: "Tin Hau", lat: 22.2822, lng: 114.1917 },
+        { id: "Fortress-Hill", name: "Fortress Hill", lat: 22.2883, lng: 114.1936 },
+        { id: "North-Point", name: "North Point", lat: 22.2911, lng: 114.2006 },
+        { id: "Quarry-Bay", name: "Quarry Bay", lat: 22.2881, lng: 114.2097 },
+        { id: "Tai-Koo", name: "Tai Koo", lat: 22.2847, lng: 114.2161 },
+        { id: "Sai-Wan-Ho", name: "Sai Wan Ho", lat: 22.2822, lng: 114.2222 },
+        { id: "Shau-Kei-Wan", name: "Shau Kei Wan", lat: 22.2794, lng: 114.2286 },
+        { id: "Heng-Fa-Chuen", name: "Heng Fa Chuen", lat: 22.2764, lng: 114.2400 },
+        { id: "Chai-Wan", name: "Chai Wan", lat: 22.2647, lng: 114.2367 }
       ]},
       "Tung Chung Line": { color: "#F38B00", stations: [
-        { id: "TC-01", name: "Tung Chung", lat: 22.2892, lng: 113.9414 },
-        { id: "TC-02", name: "Sunny Bay", lat: 22.3314, lng: 114.0281 },
-        { id: "TC-03", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 },
-        { id: "TC-04", name: "Lai King", lat: 22.3486, lng: 114.1272 },
-        { id: "TC-05", name: "Nam Cheong", lat: 22.3256, lng: 114.1534 },
-        { id: "TC-06", name: "Olympic", lat: 22.3175, lng: 114.1603 },
-        { id: "TC-07", name: "Kowloon", lat: 22.3053, lng: 114.1614 },
-        { id: "TC-08", name: "Hong Kong", lat: 22.2847, lng: 114.1581 }
+        { id: "Tung-Chung", name: "Tung Chung", lat: 22.2892, lng: 113.9414 },
+        { id: "Sunny-Bay", name: "Sunny Bay", lat: 22.3314, lng: 114.0281 },
+        { id: "Tsing-Yi", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 },
+        { id: "Lai-King", name: "Lai King", lat: 22.3486, lng: 114.1272 },
+        { id: "Nam-Cheong", name: "Nam Cheong", lat: 22.3256, lng: 114.1534 },
+        { id: "Olympic", name: "Olympic", lat: 22.3175, lng: 114.1603 },
+        { id: "Kowloon", name: "Kowloon", lat: 22.3053, lng: 114.1614 },
+        { id: "Hong-Kong", name: "Hong Kong", lat: 22.2847, lng: 114.1581 }
       ]},
       "Disneyland Resort Line": { color: "#F550A1", stations: [
-        { id: "DR-01", name: "Sunny Bay", lat: 22.3314, lng: 114.0281 },
-        { id: "DR-02", name: "Disneyland", lat: 22.3153, lng: 114.0447 }
+        { id: "Sunny-Bay", name: "Sunny Bay", lat: 22.3314, lng: 114.0281 },
+        { id: "Disneyland", name: "Disneyland", lat: 22.3153, lng: 114.0447 }
       ]},
       "East Rail Line": { color: "#53B7E8", stations: [
-        { id: "ER-01", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
-        { id: "ER-02", name: "Exhibition Centre", lat: 22.2819, lng: 114.1758 },
-        { id: "ER-03", name: "Hung Hom", lat: 22.3031, lng: 114.1818 },
-        { id: "ER-04", name: "Mong Kok East", lat: 22.3222, lng: 114.1719 },
-        { id: "ER-05", name: "Kowloon Tong", lat: 22.3370, lng: 114.1761 },
-        { id: "ER-06", name: "Tai Wai", lat: 22.3727, lng: 114.1785 },
-        { id: "ER-07", name: "Sha Tin", lat: 22.3828, lng: 114.1878 },
-        { id: "ER-08", name: "Fo Tan", lat: 22.3961, lng: 114.1953 },
-        { id: "ER-09", name: "University", lat: 22.4131, lng: 114.2100 },
-        { id: "ER-10", name: "Tai Po Market", lat: 22.4447, lng: 114.1700 },
-        { id: "ER-11", name: "Tai Wo", lat: 22.4508, lng: 114.1614 },
-        { id: "ER-12", name: "Fanling", lat: 22.4925, lng: 114.1389 },
-        { id: "ER-13", name: "Sheung Shui", lat: 22.5014, lng: 114.1278 }
+        { id: "Admiralty", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "Exhibition-Centre", name: "Exhibition Centre", lat: 22.2819, lng: 114.1758 },
+        { id: "Hung-Hom", name: "Hung Hom", lat: 22.3031, lng: 114.1818 },
+        { id: "Mong-Kok-East", name: "Mong Kok East", lat: 22.3222, lng: 114.1719 },
+        { id: "Kowloon-Tong", name: "Kowloon Tong", lat: 22.3370, lng: 114.1761 },
+        { id: "Tai-Wai", name: "Tai Wai", lat: 22.3727, lng: 114.1785 },
+        { id: "Sha-Tin", name: "Sha Tin", lat: 22.3828, lng: 114.1878 },
+        { id: "Fo-Tan", name: "Fo Tan", lat: 22.3961, lng: 114.1953 },
+        { id: "University", name: "University", lat: 22.4131, lng: 114.2100 },
+        { id: "Tai-Po-Market", name: "Tai Po Market", lat: 22.4447, lng: 114.1700 },
+        { id: "Tai-Wo", name: "Tai Wo", lat: 22.4508, lng: 114.1614 },
+        { id: "Fanling", name: "Fanling", lat: 22.4925, lng: 114.1389 },
+        { id: "Sheung-Shui", name: "Sheung Shui", lat: 22.5014, lng: 114.1278 }
       ]},
       "South Island Line": { color: "#B5BD00", stations: [
-        { id: "SIL-01", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
-        { id: "SIL-02", name: "Ocean Park", lat: 22.2472, lng: 114.1736 },
-        { id: "SIL-03", name: "Wong Chuk Hang", lat: 22.2481, lng: 114.1681 },
-        { id: "SIL-04", name: "Lei Tung", lat: 22.2425, lng: 114.1561 },
-        { id: "SIL-05", name: "South Horizons", lat: 22.2436, lng: 114.1481 }
+        { id: "Admiralty", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "Ocean-Park", name: "Ocean Park", lat: 22.2472, lng: 114.1736 },
+        { id: "Wong-Chuk-Hang", name: "Wong Chuk Hang", lat: 22.2481, lng: 114.1681 },
+        { id: "Lei-Tung", name: "Lei Tung", lat: 22.2425, lng: 114.1561 },
+        { id: "South-Horizons", name: "South Horizons", lat: 22.2436, lng: 114.1481 }
       ]},
       "Tseung Kwan O Line": { color: "#8D3685", stations: [
-        { id: "TKO-01", name: "North Point", lat: 22.2911, lng: 114.2006 },
-        { id: "TKO-02", name: "Quarry Bay", lat: 22.2881, lng: 114.2097 },
-        { id: "TKO-03", name: "Yau Tong", lat: 22.2978, lng: 114.2372 },
-        { id: "TKO-04", name: "Tiu Keng Leng", lat: 22.3028, lng: 114.2528 },
-        { id: "TKO-05", name: "Tseung Kwan O", lat: 22.3075, lng: 114.2600 },
-        { id: "TKO-06", name: "Hang Hau", lat: 22.3156, lng: 114.2644 },
-        { id: "TKO-07", name: "Po Lam", lat: 22.3225, lng: 114.2578 },
-        { id: "TKO-08", name: "LOHAS Park", lat: 22.2953, lng: 114.2689 }
+        { id: "North-Point", name: "North Point", lat: 22.2911, lng: 114.2006 },
+        { id: "Quarry-Bay", name: "Quarry Bay", lat: 22.2881, lng: 114.2097 },
+        { id: "Yau-Tong", name: "Yau Tong", lat: 22.2978, lng: 114.2372 },
+        { id: "Tiu-Keng-Leng", name: "Tiu Keng Leng", lat: 22.3028, lng: 114.2528 },
+        { id: "Tseung-Kwan-O", name: "Tseung Kwan O", lat: 22.3075, lng: 114.2600 },
+        { id: "Hang-Hau", name: "Hang Hau", lat: 22.3156, lng: 114.2644 },
+        { id: "Po-Lam", name: "Po Lam", lat: 22.3225, lng: 114.2578 },
+        { id: "LOHAS-Park", name: "LOHAS Park", lat: 22.2953, lng: 114.2689 }
       ]},
       /* Custom Bus Lines */
       "Tuen Tsuen Line": { color: "#E01B84", stations: [
-        { id: "TTL-01", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
-        { id: "TTL-02", name: "Gold Coast", lat: 22.3714, lng: 113.9928 },
-        { id: "TTL-03", name: "Tai Lam", lat: 22.3619, lng: 114.0189 },
-        { id: "TTL-04", name: "Sham Tseng", lat: 22.3672, lng: 114.0531 },
-        { id: "TTL-05", name: "Belvedere Garden", lat: 22.3711, lng: 114.1011 },
-        { id: "TTL-06", name: "Tsuen Wan West", lat: 22.3683, lng: 114.1114 }
+        { id: "Tuen-Mun", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
+        { id: "Gold-Coast", name: "Gold Coast", lat: 22.3714, lng: 113.9928 },
+        { id: "Tai-Lam", name: "Tai Lam", lat: 22.3619, lng: 114.0189 },
+        { id: "Sham-Tseng", name: "Sham Tseng", lat: 22.3672, lng: 114.0531 },
+        { id: "Belvedere-Garden", name: "Belvedere Garden", lat: 22.3711, lng: 114.1011 },
+        { id: "Tsuen-Wan-West", name: "Tsuen Wan West", lat: 22.3683, lng: 114.1114 }
       ]},
       "Northern Link": { color: "#D80073", stations: [
-        { id: "NL-01", name: "Yuen Long", lat: 22.4451, lng: 114.0357 },
-        { id: "NL-02", name: "Ngau Tam Mei", lat: 22.4681, lng: 114.0583 },
-        { id: "NL-03", name: "San Tin", lat: 22.4914, lng: 114.0750 },
-        { id: "NL-04", name: "Kwu Tung", lat: 22.5050, lng: 114.1014 },
-        { id: "NL-05", name: "Sheung Shui", lat: 22.5014, lng: 114.1278 }
+        { id: "Yuen-Long", name: "Yuen Long", lat: 22.4451, lng: 114.0357 },
+        { id: "Ngau-Tam-Mei", name: "Ngau Tam Mei", lat: 22.4681, lng: 114.0583 },
+        { id: "San-Tin", name: "San Tin", lat: 22.4914, lng: 114.0750 },
+        { id: "Kwu-Tung", name: "Kwu Tung", lat: 22.5050, lng: 114.1014 },
+        { id: "Sheung-Shui", name: "Sheung Shui", lat: 22.5014, lng: 114.1278 }
       ]},
       "Sai Kung Line": { color: "#00FF66", stations: [
-        { id: "SK-01", name: "Wu Kai Sha", lat: 22.4285, lng: 114.2388 },
-        { id: "SK-02", name: "GO Park", lat: 22.4181, lng: 114.2533 },
-        { id: "SK-03", name: "Wong Chuk Wan", lat: 22.3956, lng: 114.2725 },
-        { id: "SK-04", name: "Sai Kung", lat: 22.3814, lng: 114.2708 },
-        { id: "SK-05", name: "Ho Chung", lat: 22.3533, lng: 114.2558 },
-        { id: "SK-06", name: "Tseng Lan Shue", lat: 22.3331, lng: 114.2333 },
-        { id: "SK-07", name: "Choi Hung", lat: 22.3347, lng: 114.2089 }
+        { id: "Wu-Kai-Sha", name: "Wu Kai Sha", lat: 22.4285, lng: 114.2388 },
+        { id: "GO-Park", name: "GO Park", lat: 22.4181, lng: 114.2533 },
+        { id: "Wong-Chuk-Wan", name: "Wong Chuk Wan", lat: 22.3956, lng: 114.2725 },
+        { id: "Sai-Kung", name: "Sai Kung", lat: 22.3814, lng: 114.2708 },
+        { id: "Ho-Chung", name: "Ho Chung", lat: 22.3533, lng: 114.2558 },
+        { id: "Tseng-Lan-Shue", name: "Tseng Lan Shue", lat: 22.3331, lng: 114.2333 },
+        { id: "Choi-Hung", name: "Choi Hung", lat: 22.3347, lng: 114.2089 }
       ]},
       "UST Line": { color: "#800000", stations: [
-        { id: "UST-01", name: "Hang Hau", lat: 22.3156, lng: 114.2644 },
-        { id: "UST-02", name: "Clear Water Bay", lat: 22.2883, lng: 114.2883 },
-        { id: "UST-03", name: "HKUST", lat: 22.3364, lng: 114.2636 },
-        { id: "UST-04", name: "Tseng Lan Shue", lat: 22.3331, lng: 114.2333 },
-        { id: "UST-05", name: "Choi Hung", lat: 22.3347, lng: 114.2089 }
+        { id: "Hang-Hau", name: "Hang Hau", lat: 22.3156, lng: 114.2644 },
+        { id: "Clear-Water-Bay", name: "Clear Water Bay", lat: 22.2883, lng: 114.2883 },
+        { id: "HKUST", name: "HKUST", lat: 22.3364, lng: 114.2636 },
+        { id: "Tseng-Lan-Shue", name: "Tseng Lan Shue", lat: 22.3331, lng: 114.2333 },
+        { id: "Choi-Hung", name: "Choi Hung", lat: 22.3347, lng: 114.2089 }
       ]},
       "Tsing Yi Circular": { color: "#008080", stations: [
-        { id: "TY-01", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 },
-        { id: "TY-02", name: "Tivoli Garden", lat: 22.3525, lng: 114.1056 },
-        { id: "TY-03", name: "Cheung Hong", lat: 22.3481, lng: 114.1033 },
-        { id: "TY-04", name: "Cheung Ching", lat: 22.3469, lng: 114.1083 },
-        { id: "TY-05", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 }
+        { id: "Tsing-Yi", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 },
+        { id: "Tivoli-Garden", name: "Tivoli Garden", lat: 22.3525, lng: 114.1056 },
+        { id: "Cheung-Hong", name: "Cheung Hong", lat: 22.3481, lng: 114.1033 },
+        { id: "Cheung-Ching", name: "Cheung Ching", lat: 22.3469, lng: 114.1083 },
+        { id: "Tsing-Yi", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 }
       ]},
       "West Island Line": { color: "#FFD700", stations: [
-        { id: "WIL-01", name: "HKU", lat: 22.2842, lng: 114.1350 },
-        { id: "WIL-02", name: "Queen Mary Hospital", lat: 22.2700, lng: 114.1311 },
-        { id: "WIL-03", name: "Wah Fu", lat: 22.2519, lng: 114.1378 },
-        { id: "WIL-04", name: "Tin Wan", lat: 22.2522, lng: 114.1528 },
-        { id: "WIL-05", name: "Aberdeen", lat: 22.2481, lng: 114.1558 },
-        { id: "WIL-06", name: "Wong Chuk Hang", lat: 22.2481, lng: 114.1681 }
+        { id: "HKU", name: "HKU", lat: 22.2842, lng: 114.1350 },
+        { id: "Queen-Mary-Hospital", name: "Queen Mary Hospital", lat: 22.2700, lng: 114.1311 },
+        { id: "Wah-Fu", name: "Wah Fu", lat: 22.2519, lng: 114.1378 },
+        { id: "Tin-Wan", name: "Tin Wan", lat: 22.2522, lng: 114.1528 },
+        { id: "Aberdeen", name: "Aberdeen", lat: 22.2481, lng: 114.1558 },
+        { id: "Wong-Chuk-Hang", name: "Wong Chuk Hang", lat: 22.2481, lng: 114.1681 }
       ]},
       "Stanley Line": { color: "#1E90FF", stations: [
-        { id: "STL-01", name: "Ocean Park", lat: 22.2472, lng: 114.1736 },
-        { id: "STL-02", name: "Repulse Bay", lat: 22.2369, lng: 114.1967 },
-        { id: "STL-03", name: "Stanley", lat: 22.2192, lng: 114.2125 },
-        { id: "STL-04", name: "Tai Tam", lat: 22.2417, lng: 114.2236 },
-        { id: "STL-05", name: "Chai Wan Gap", lat: 22.2614, lng: 114.2289 },
-        { id: "STL-06", name: "Sai Wan Ho", lat: 22.2822, lng: 114.2222 }
+        { id: "Ocean-Park", name: "Ocean Park", lat: 22.2472, lng: 114.1736 },
+        { id: "Repulse-Bay", name: "Repulse Bay", lat: 22.2369, lng: 114.1967 },
+        { id: "Stanley", name: "Stanley", lat: 22.2192, lng: 114.2125 },
+        { id: "Tai-Tam", name: "Tai Tam", lat: 22.2417, lng: 114.2236 },
+        { id: "Chai-Wan-Gap", name: "Chai Wan Gap", lat: 22.2614, lng: 114.2289 },
+        { id: "Sai-Wan-Ho", name: "Sai Wan Ho", lat: 22.2822, lng: 114.2222 }
       ]}
     };
 
@@ -676,36 +677,36 @@
        CHALLENGE DATABASE (Station, Title, Desc, Type, Reward)
        ========================================================================= */
     const CHALLENGES_DATABASE = [
-      { id: "CH-01", stationId: "TM-01", title: "Tuen Mun River Dash", desc: "Run a 400m sprint along Tuen Mun River park area and post a video proof.", type: "Fixed Reward", reward: 12 },
-      { id: "CH-02", stationId: "TW-15", title: "Admiralty Interchange Speed", desc: "Navigate from Island Line platform to South Island Line platform within 90 seconds.", type: "Fixed Reward", reward: 15 },
-      { id: "CH-03", stationId: "IS-05", title: "Central Mid-Levels Escalator Challenge", desc: "Take the escalator up 3 full sections without stopping or touching handrails.", type: "Fixed Reward", reward: 18 },
-      { id: "CH-04", stationId: "DR-02", title: "Disneyland Magic Call", desc: "Call your shot: Name 5 Disney movies in under 15 seconds or get 0 chips.", type: "Variable", reward: 0 },
-      { id: "CH-05", stationId: "KT-11", title: "Choi Hung Rainbow Photo", desc: "Take a selfie with the iconic colored basketball court background.", type: "Fixed Reward", reward: 10 },
-      { id: "CH-06", stationId: "SK-04", title: "Sai Kung Seafood Quiz", desc: "Name 3 local seafood species sold at Sai Kung Pier.", type: "Fixed Reward", reward: 14 },
-      { id: "CH-07", stationId: "UST-03", title: "HKUST Atrium Shoutout", desc: "Take a picture of the HKUST Red Bird Sundial sculpture.", type: "Fixed Reward", reward: 15 },
-      { id: "CH-08", stationId: "STL-03", title: "Stanley Beach Chip Heist", desc: "Steal 20% of opponent's current chip balance (rounded up).", type: "Steal", stealPercent: 0.20, reward: 0 },
-      { id: "CH-09", stationId: "TC-01", title: "Tung Chung Cable Car Sight", desc: "Find a vantage point and photograph 2 Ngong Ping cable cars in 1 frame.", type: "Fixed Reward", reward: 16 },
-      { id: "CH-10", stationId: "ER-07", title: "Sha Tin Town Park Sprint", desc: "Call your shot: Estimate exact walking time to Sha Tin Town Hall ± 15 sec.", type: "Variable", reward: 0 },
-      { id: "CH-11", stationId: "TW-14", title: "TST Promenade Walk", desc: "Walk to Avenue of Stars and touch Bruce Lee's statue base.", type: "Fixed Reward", reward: 18 },
-      { id: "CH-12", stationId: "KT-07", title: "Kowloon Tong Hub Heist", desc: "Steal 15% of opponent's chips.", type: "Steal", stealPercent: 0.15, reward: 0 },
-      { id: "CH-13", stationId: "TM-27", title: "Wu Kai Sha Sunset Point", desc: "Take a photo of the Tolo Harbour coastline from Wu Kai Sha pier.", type: "Fixed Reward", reward: 14 },
-      { id: "CH-14", stationId: "SIL-02", title: "Ocean Park Roller Coaster Spot", desc: "Spot the coaster tracks from station concourse and photo them.", type: "Fixed Reward", reward: 12 },
-      { id: "CH-15", stationId: "IS-08", title: "Causeway Bay Shopping Dash", desc: "Call your shot: Buy any item for under HK$10 and show receipt.", type: "Variable", reward: 0 },
-      { id: "CH-16", stationId: "TW-01", title: "Tsuen Wan Overpass Maze", desc: "Traverse 3 connected footbridges without dropping to street level.", type: "Fixed Reward", reward: 16 },
-      { id: "CH-17", stationId: "KT-01", title: "Whampoa Ship Building", desc: "Take a picture inside the Whampoa Boat Shopping Mall concourse.", type: "Fixed Reward", reward: 12 },
-      { id: "CH-18", stationId: "ER-13", title: "Sheung Shui Frontier View", desc: "Find the northernmost exit and record a 5-sec video looking north.", type: "Fixed Reward", reward: 20 },
-      { id: "CH-19", stationId: "WIL-02", title: "Queen Mary Hill Climb", desc: "Climb the main access stairs from Pok Fu Lam Road in under 2 mins.", type: "Fixed Reward", reward: 18 },
-      { id: "CH-20", stationId: "TY-01", title: "Tsing Yi Bridge View", desc: "Photograph the Tsing Tsuen Bridge from Maritime Square deck.", type: "Fixed Reward", reward: 14 },
-      { id: "CH-21", stationId: "TW-11", title: "Mong Kok Street Food", desc: "Buy a skewer of curry fishballs and take a photo eating it.", type: "Fixed Reward", reward: 15 },
-      { id: "CH-22", stationId: "IS-07", title: "Wan Chai Ferry Sprint", desc: "Sprint from Wan Chai station to the Star Ferry Pier in under 8 mins.", type: "Fixed Reward", reward: 20 },
-      { id: "CH-23", stationId: "KT-14", title: "Kwun Tong Promenade", desc: "Take a photo of the old industrial crane structure at the promenade.", type: "Fixed Reward", reward: 12 },
-      { id: "CH-24", stationId: "TM-12", title: "Hung Hom Colosseum Call", desc: "Call your shot: Name 5 artists who performed at the HK Coliseum.", type: "Variable", reward: 0 },
-      { id: "CH-25", stationId: "ER-10", title: "Tai Po Railway Museum", desc: "Take a picture with the vintage train cars at the Railway Museum.", type: "Fixed Reward", reward: 18 },
-      { id: "CH-26", stationId: "TC-06", title: "Olympic Gold Pose", desc: "Do a victory pose in front of the Olympic station plaza rings.", type: "Fixed Reward", reward: 10 },
-      { id: "CH-27", stationId: "NL-01", title: "Yuen Long Light Rail Catch", desc: "Take a photo of two Light Rail trains passing each other.", type: "Fixed Reward", reward: 15 },
-      { id: "CH-28", stationId: "TKO-05", title: "TKO Bike Path Dash", desc: "Find a shared bike and ride 500m along the TKO cycle track.", type: "Fixed Reward", reward: 22 },
-      { id: "CH-29", stationId: "IS-04", title: "Sheung Wan Dried Seafood", desc: "Find a shop selling dried scallops and ask for the price.", type: "Fixed Reward", reward: 12 },
-      { id: "CH-30", stationId: "TW-09", title: "Sham Shui Po Tech Hunt", desc: "Golden Computer Arcade: Find and photograph a floppy disk or retro game.", type: "Fixed Reward", reward: 18 }
+      { id: "CH-01", stationId: "Tuen-Mun", title: "Tuen Mun River Dash", desc: "Run a 400m sprint along Tuen Mun River park area and post a video proof.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-02", stationId: "Admiralty", title: "Admiralty Interchange Speed", desc: "Navigate from Island Line platform to South Island Line platform within 90 seconds.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-03", stationId: "Central", title: "Central Mid-Levels Escalator Challenge", desc: "Take the escalator up 3 full sections without stopping or touching handrails.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-04", stationId: "Disneyland", title: "Disneyland Magic Call", desc: "Call your shot: Name 5 Disney movies in under 15 seconds or get 0 chips.", type: "Variable", reward: 0 },
+      { id: "CH-05", stationId: "Choi-Hung", title: "Choi Hung Rainbow Photo", desc: "Take a selfie with the iconic colored basketball court background.", type: "Fixed Reward", reward: 10 },
+      { id: "CH-06", stationId: "Sai-Kung", title: "Sai Kung Seafood Quiz", desc: "Name 3 local seafood species sold at Sai Kung Pier.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-07", stationId: "HKUST", title: "HKUST Atrium Shoutout", desc: "Take a picture of the HKUST Red Bird Sundial sculpture.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-08", stationId: "Stanley", title: "Stanley Beach Chip Heist", desc: "Steal 20% of opponent's current chip balance (rounded up).", type: "Steal", stealPercent: 0.20, reward: 0 },
+      { id: "CH-09", stationId: "Tung-Chung", title: "Tung Chung Cable Car Sight", desc: "Find a vantage point and photograph 2 Ngong Ping cable cars in 1 frame.", type: "Fixed Reward", reward: 16 },
+      { id: "CH-10", stationId: "Sha-Tin", title: "Sha Tin Town Park Sprint", desc: "Call your shot: Estimate exact walking time to Sha Tin Town Hall ± 15 sec.", type: "Variable", reward: 0 },
+      { id: "CH-11", stationId: "Tsim-Sha-Tsui", title: "TST Promenade Walk", desc: "Walk to Avenue of Stars and touch Bruce Lee's statue base.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-12", stationId: "Kowloon-Tong", title: "Kowloon Tong Hub Heist", desc: "Steal 15% of opponent's chips.", type: "Steal", stealPercent: 0.15, reward: 0 },
+      { id: "CH-13", stationId: "Wu-Kai-Sha", title: "Wu Kai Sha Sunset Point", desc: "Take a photo of the Tolo Harbour coastline from Wu Kai Sha pier.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-14", stationId: "Ocean-Park", title: "Ocean Park Roller Coaster Spot", desc: "Spot the coaster tracks from station concourse and photo them.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-15", stationId: "Causeway-Bay", title: "Causeway Bay Shopping Dash", desc: "Call your shot: Buy any item for under HK$10 and show receipt.", type: "Variable", reward: 0 },
+      { id: "CH-16", stationId: "Tsuen-Wan", title: "Tsuen Wan Overpass Maze", desc: "Traverse 3 connected footbridges without dropping to street level.", type: "Fixed Reward", reward: 16 },
+      { id: "CH-17", stationId: "Whampoa", title: "Whampoa Ship Building", desc: "Take a picture inside the Whampoa Boat Shopping Mall concourse.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-18", stationId: "Sheung-Shui", title: "Sheung Shui Frontier View", desc: "Find the northernmost exit and record a 5-sec video looking north.", type: "Fixed Reward", reward: 20 },
+      { id: "CH-19", stationId: "Queen-Mary-Hospital", title: "Queen Mary Hill Climb", desc: "Climb the main access stairs from Pok Fu Lam Road in under 2 mins.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-20", stationId: "Tsing-Yi", title: "Tsing Yi Bridge View", desc: "Photograph the Tsing Tsuen Bridge from Maritime Square deck.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-21", stationId: "Mong-Kok", title: "Mong Kok Street Food", desc: "Buy a skewer of curry fishballs and take a photo eating it.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-22", stationId: "Wan-Chai", title: "Wan Chai Ferry Sprint", desc: "Sprint from Wan Chai station to the Star Ferry Pier in under 8 mins.", type: "Fixed Reward", reward: 20 },
+      { id: "CH-23", stationId: "Kwun-Tong", title: "Kwun Tong Promenade", desc: "Take a photo of the old industrial crane structure at the promenade.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-24", stationId: "Hung-Hom", title: "Hung Hom Colosseum Call", desc: "Call your shot: Name 5 artists who performed at the HK Coliseum.", type: "Variable", reward: 0 },
+      { id: "CH-25", stationId: "Tai-Po-Market", title: "Tai Po Railway Museum", desc: "Take a picture with the vintage train cars at the Railway Museum.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-26", locationName: "Tin Sau Road Park", lat: 22.4633, lng: 114.0019, title: "Park Dash", desc: "Run across Tin Sau Road Park.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-27", locationName: "Victoria Park", lat: 22.2820, lng: 114.1888, title: "Victoria Park Sprint", desc: "Run a lap around the central lawn of Victoria Park.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-28", locationName: "Kowloon Park", lat: 22.3014, lng: 114.1699, title: "Kowloon Park Bird Watching", desc: "Spot and photograph 3 different types of birds in Kowloon Park.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-29", locationName: "Tamar Park", lat: 22.2816, lng: 114.1656, title: "Tamar Park Picnic", desc: "Take a photo sitting on the grass at Tamar Park with a view of the harbor.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-30", locationName: "Hong Kong Park", lat: 22.2770, lng: 114.1610, title: "Hong Kong Park Aviary", desc: "Take a selfie inside the Edward Youde Aviary in Hong Kong Park.", type: "Fixed Reward", reward: 16 }
     ];
 
     /* =========================================================================
@@ -958,6 +959,10 @@
         if (owner === 'Sureman' || owner === 'Yeung') {
           controlled[owner]++;
         }
+        // Render map markers visually
+      renderMapMarkers();
+      // Add this line below to render your custom lat/lng challenges:
+      renderFloatingChallenges();
       });
 
       // 2. Check full line control (+3 bonus per full line)
@@ -1067,6 +1072,60 @@
       });
     }
 
+    function renderFloatingChallenges() {
+      // Clear existing free-floating markers
+      Object.values(floatingChallengeMarkers).forEach(m => map.removeLayer(m));
+      floatingChallengeMarkers = {};
+
+  // Only render if game is active or ended
+      if (!gameState.gameStarted && !gameState.gameEnded) return;
+
+      gameState.activeChallenges.forEach(chId => {
+        const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
+    
+    // Check if it's a coordinate-based challenge instead of a station-based one
+        if (ch && ch.lat && ch.lng) {
+          let badgeColor = 'bg-red-500'; 
+          let iconHtml = '<i class="fa-solid fa-bolt"></i>';
+
+          if (ch.type === 'Fixed Reward') {
+             badgeColor = 'bg-emerald-500';
+             const bonus = getHourlyChallengeBonus();
+             iconHtml = `<span class="text-[10px]">+${ch.reward + bonus}</span>`;
+          } else if (ch.type === 'Variable') {
+             badgeColor = 'bg-purple-500';
+             iconHtml = `<i class="fa-solid fa-bullseye text-[12px]"></i>`;
+          } else if (ch.type === 'Steal') {
+             badgeColor = 'bg-rose-600';
+             iconHtml = `<i class="fa-solid fa-mask text-[12px]"></i>`;
+          }
+
+      // Create a standalone badge div
+          const wrapper = document.createElement('div');
+          wrapper.className = `challenge-badge ${badgeColor} relative z-40 cursor-pointer w-8 h-8 flex items-center justify-center`;
+          wrapper.style.top = '0';
+          wrapper.style.right = '0';
+          wrapper.innerHTML = iconHtml;
+
+          const customIcon = L.divIcon({
+            html: wrapper,
+            className: '',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          });
+
+          const marker = L.marker([ch.lat, ch.lng], { icon: customIcon }).addTo(map);
+      
+      // Directly open the challenge modal when clicked
+          marker.on('click', () => {
+            openChallengeModal(chId);
+          });
+
+          floatingChallengeMarkers[chId] = marker;
+        }
+      });
+    }
+
     /* =========================================================================
        CHALLENGES MANAGEMENT & ROTATION SYSTEM
        ========================================================================= */
@@ -1097,7 +1156,13 @@
 
       document.getElementById('ch-modal-title').innerText = ch.title;
       document.getElementById('ch-modal-type').innerText = ch.type;
-      document.getElementById('ch-modal-station').innerText = `Location: ${st ? st.name : 'Hong Kong'}`;
+      if (ch.locationName) {
+        document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> ${ch.locationName}`;
+      } else if (st) {
+        document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> ${st.name}`;
+     } else {
+       document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> Custom Location`;
+     }
       document.getElementById('ch-modal-desc').innerText = ch.desc;
 
       // Handle custom displays based on challenge type
