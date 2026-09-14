@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HK Rail Rush - Jet Lag HK Engine</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            sureman: '#f97316', // Orange
+            yeung: '#22c55e',   // Green
+            darkbg: '#0f172a',
+            cardbg: '#1e293b'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Firebase Compat Libraries for single-file stability -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <style>
+    body, html {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    
+    #map {
+      height: 100vh;
+      width: 100vw;
+      z-index: 1;
+      background: #0f172a;
+    }
+
+    /* Dark Map Tiles Filter */
+    .dark-tiles .leaflet-tile-container {
+      filter: brightness(0.7) invert(1) contrast(1.2) hue-rotate(200deg) saturate(0.3);
+    }
+
+    /* Custom station pulse markers */
+    .station-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-weight: bold;
+      font-size: 11px;
+      color: white;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 10px rgba(0,0,0,0.8);
+      transition: all 0.3s ease;
+    }
+
+    .station-unclaimed {
+      background: #334155;
+      border-color: #94a3b8;
+    }
+    .station-sureman {
+      background: #f97316;
+      border-color: #ffedd5;
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.8);
+    }
+    .station-yeung {
+      background: #22c55e;
+      border-color: #dcfce7;
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+    }
+
+    .challenge-badge {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      color: white;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      animation: pulse 2s infinite;
+      z-index: 30;
+      pointer-events: auto; /* Ensure clickable */
+      box-shadow: 0 2px 5px rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.4);
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(0.95); }
+    }
+
+    /* Glassmorphic UI overlays */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="select-none">
+
+  <!-- Top Bar: Scores & Time -->
+  <div class="fixed top-2 left-2 right-2 z-20 flex flex-col gap-2 max-w-lg mx-auto">
+    <div class="glass-panel rounded-2xl p-3 shadow-2xl flex items-center justify-between border-t border-white/10">
+      <!-- Sureman Team Score -->
+      <div id="team-sureman-card" onclick="selectTeam('Sureman')" class="flex-1 flex items-center gap-2.5 p-2 rounded-xl transition cursor-pointer border border-transparent">
+        <div class="w-9 h-9 rounded-full bg-sureman flex items-center justify-center font-black text-white text-base shadow-lg shadow-orange-500/30">S</div>
+        <div>
+          <div class="flex items-center gap-1">
+            <span class="text-xs font-bold text-orange-400 uppercase tracking-wider">Sureman</span>
+            <span id="sureman-active-badge" class="hidden bg-orange-500/20 text-orange-300 text-[9px] px-1.5 py-0.5 rounded font-semibold">YOU</span>
+          </div>
+          <div class="text-lg font-black leading-none text-white">
+            <span id="score-sureman">0</span> <span class="text-xs font-normal text-slate-400">pts</span>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            <i class="fa-solid fa-coins text-amber-400 mr-0.5"></i> <span id="chips-sureman">10</span> chips
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider / HKT Clock -->
+      <div class="flex flex-col items-center justify-center px-2 border-x border-slate-700/60 min-w-[100px]">
+        <span class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">HKT Time</span>
+        <span id="clock-hkt" class="text-sm font-mono font-bold text-cyan-400">00:00:00</span>
+        <span id="elapsed-time" class="text-[10px] font-mono text-amber-400 font-medium">Elapsed: 00:00</span>
+      </div>
+
+      <!-- Yeung Team Score -->
+      <div id="team-yeung-card" onclick="selectTeam('Yeung')" class="flex-1 flex items-center justify-end gap-2.5 p-2 rounded-xl transition cursor-pointer border border-transparent text-right">
+        <div>
+          <div class="flex items-center justify-end gap-1">
+            <span id="yeung-active-badge" class="hidden bg-green-500/20 text-green-300 text-[9px] px-1.5 py-0.5 rounded font-semibold">YOU</span>
+            <span class="text-xs font-bold text-green-400 uppercase tracking-wider">Yeung</span>
+          </div>
+          <div class="text-lg font-black leading-none text-white">
+            <span id="score-yeung">0</span> <span class="text-xs font-normal text-slate-400">pts</span>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            <i class="fa-solid fa-coins text-amber-400 mr-0.5"></i> <span id="chips-yeung">10</span> chips
+          </div>
+        </div>
+        <div class="w-9 h-9 rounded-full bg-yeung flex items-center justify-center font-black text-white text-base shadow-lg shadow-green-500/30">Y</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Floating Navigation / Action Bar -->
+  <div class="fixed bottom-4 left-4 right-4 z-20 max-w-lg mx-auto flex items-center justify-center gap-4">
+    <button onclick="executeUndo()" class="flex-1 glass-panel px-3.5 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-800 text-amber-400 shadow-xl border border-slate-700">
+      <i class="fa-solid fa-rotate-left text-sm"></i>
+      <span>Undo Action</span>
+    </button>
+
+    <button onclick="openAdminModal()" class="flex-1 glass-panel px-3.5 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-slate-800 text-slate-300 shadow-xl border border-slate-700">
+      <i class="fa-solid fa-shield-halved text-cyan-400 text-sm"></i>
+      <span>Admin Panel</span>
+    </button>
+  </div>
+
+  <!-- Main Map Container -->
+  <div id="map" class="w-full h-full"></div>
+
+  <!-- Station Claim/Add Chips Modal -->
+  <div id="station-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-sm rounded-2xl p-5 border border-slate-700 shadow-2xl animate-fade-in">
+      <div class="flex justify-between items-start mb-3">
+        <div>
+          <span id="modal-station-line" class="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-700 text-slate-300">Line Name</span>
+          <h2 id="modal-station-name" class="text-xl font-black text-white mt-1">Station Name</h2>
+        </div>
+        <button onclick="closeModal('station-modal')" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Current Ownership Info -->
+      <div class="bg-slate-800/80 rounded-xl p-3 mb-4 border border-slate-700/60 flex items-center justify-between">
+        <div>
+          <div class="text-[11px] text-slate-400">Current Owner</div>
+          <div id="modal-owner-text" class="font-bold text-sm text-slate-200">Unclaimed</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[11px] text-slate-400">Chips On Station</div>
+          <div id="modal-coins-text" class="font-bold text-sm text-amber-400">0 chips</div>
+        </div>
+      </div>
+
+      <!-- Deposit Selector -->
+      <div class="mb-5">
+        <label class="block text-xs font-bold text-slate-300 mb-2">
+          Add Chips for <span id="modal-team-acting" class="font-bold">Your Team</span>
+          <span class="text-[10px] font-normal text-slate-400">(Max +5)</span>
+        </label>
+
+        <div class="grid grid-cols-5 gap-2 mb-3">
+          <button onclick="selectChipAmount(1)" class="chip-opt-btn bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 font-bold text-sm text-white">+1</button>
+          <button onclick="selectChipAmount(2)" class="chip-opt-btn bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 font-bold text-sm text-white">+2</button>
+          <button onclick="selectChipAmount(3)" class="chip-opt-btn bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 font-bold text-sm text-white">+3</button>
+          <button onclick="selectChipAmount(4)" class="chip-opt-btn bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 font-bold text-sm text-white">+4</button>
+          <button onclick="selectChipAmount(5)" class="chip-opt-btn bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 font-bold text-sm text-white">+5</button>
+        </div>
+
+        <!-- Cost Calculator -->
+        <div class="bg-slate-900/50 rounded-xl p-3 border border-slate-700">
+           <div class="flex justify-between text-xs mb-1.5">
+             <span class="text-slate-400">Current Station Chips:</span>
+             <span id="calc-current-chips" class="font-bold text-slate-300">0</span>
+           </div>
+           <div class="flex justify-between text-xs mb-1.5">
+             <span class="text-slate-400">Addition (+):</span>
+             <span id="calc-addition" class="font-bold text-emerald-400">1</span>
+           </div>
+           <div class="flex justify-between text-sm mt-2 pt-2 border-t border-slate-700/50">
+             <span class="text-slate-300 font-bold">Total Cost to Pay:</span>
+             <span id="calc-total-cost" class="font-black text-amber-400">1 chip</span>
+           </div>
+        </div>
+
+        <p id="modal-claim-hint" class="text-[10px] text-slate-400 italic mt-3 text-center">
+          You must pay the full new balance to claim or fortify a station.
+        </p>
+      </div>
+
+      <!-- Challenge Action Button (Hidden by Default) -->
+      <button id="modal-challenge-btn" class="hidden w-full mb-3 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 font-bold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center justify-center gap-2">
+        <i class="fa-solid fa-bolt"></i>
+        <span>View Active Challenge</span>
+      </button>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-2">
+        <button onclick="closeModal('station-modal')" class="flex-1 py-2.5 rounded-xl border border-slate-600 font-bold text-xs text-slate-300 hover:bg-slate-800">Cancel</button>
+        <button id="btn-confirm-chips" onclick="confirmDepositChips()" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 font-bold text-xs text-slate-950 shadow-lg shadow-amber-500/20">
+          Pay 1 Chip
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Challenge Details Modal -->
+  <div id="challenge-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-sm rounded-2xl p-5 border border-slate-700 shadow-2xl animate-fade-in">
+      <div class="flex justify-between items-start mb-2">
+        <span id="ch-modal-type" class="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">Fixed Reward</span>
+        <button onclick="closeModal('challenge-modal')" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <h2 id="ch-modal-title" class="text-lg font-black text-white mb-1">Challenge Title</h2>
+      <p id="ch-modal-station" class="text-xs font-semibold text-cyan-400 mb-3"><i class="fa-solid fa-location-dot mr-1"></i> Location Name</p>
+
+      <div class="bg-slate-800/90 rounded-xl p-3.5 mb-4 border border-slate-700">
+        <p id="ch-modal-desc" class="text-xs text-slate-300 leading-relaxed">
+          Challenge description goes here...
+        </p>
+      </div>
+
+      <!-- Reward Breakdown -->
+      <div class="flex items-center justify-between bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 mb-5">
+        <div>
+          <div class="text-[10px] text-amber-300 font-bold uppercase tracking-wider">Base Reward</div>
+          <div id="ch-modal-base-reward" class="text-sm font-black text-amber-400">+10 chips</div>
+        </div>
+        <div class="text-right">
+          <div class="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Current Scaled Value</div>
+          <div id="ch-modal-current-reward" class="text-lg font-black text-emerald-400">+10 chips</div>
+        </div>
+      </div>
+
+      <!-- Variable Input Section -->
+      <div id="ch-variable-input-section" class="hidden bg-slate-900/50 rounded-xl p-3 border border-slate-700 mb-4 shadow-inner">
+        <label class="block text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1.5">Enter Reward Chips Earned</label>
+        <input type="number" id="ch-variable-input" class="w-full bg-slate-800 border border-slate-600 focus:border-cyan-400 focus:outline-none rounded-lg px-3 py-2 text-white font-bold text-center text-lg" min="0" value="0">
+      </div>
+
+      <!-- Clear / Fail Buttons -->
+      <div id="ch-action-buttons" class="space-y-2">
+        <button onclick="resolveChallenge('CLEAR')" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 font-bold text-xs text-slate-950 shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-circle-check text-sm"></i>
+          <span>Challenge Cleared (+<span id="ch-clear-reward-val">0</span> Chips)</span>
+        </button>
+        
+        <button onclick="resolveChallenge('FAIL')" class="w-full py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 font-bold text-xs text-rose-300 flex items-center justify-center gap-2">
+          <i class="fa-solid fa-circle-xmark text-sm"></i>
+          <span>Failed Challenge (Opponent Gets +50% Boost)</span>
+        </button>
+      </div>
+
+      <div id="ch-failed-notice" class="hidden p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-center text-xs text-rose-300 font-medium">
+        <i class="fa-solid fa-ban mr-1"></i> Your team has failed this challenge.
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Panel Passcode Modal -->
+  <div id="admin-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-sm rounded-2xl p-5 border border-slate-700 shadow-2xl">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-black text-white flex items-center gap-2">
+          <i class="fa-solid fa-shield-halved text-cyan-400"></i>
+          <span>Admin Control Panel</span>
+        </h2>
+        <button onclick="closeModal('admin-modal')" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Password Prompt Phase -->
+      <div id="admin-passcode-view">
+        <p class="text-xs text-slate-300 mb-3">Enter the 4-digit admin passcode:</p>
+        <input type="password" id="admin-passcode-input" maxlength="4" placeholder="****" class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-center font-mono text-lg text-white mb-3 tracking-widest focus:outline-none focus:border-cyan-400" />
+        <button onclick="verifyAdminPasscode()" class="w-full py-2.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-cyan-500/20">
+          Unlock Admin Panel
+        </button>
+      </div>
+
+      <!-- Controls Phase (Hidden until passcode standard 8520 verified) -->
+      <div id="admin-controls-view" class="hidden space-y-3">
+        <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-xs space-y-1">
+          <div><span class="text-slate-400">Game Status:</span> <span id="admin-status-text" class="font-bold text-emerald-400">In Progress</span></div>
+          <div><span class="text-slate-400">Started At (HKT):</span> <span id="admin-start-time-text" class="font-mono text-cyan-300">Not Started</span></div>
+        </div>
+
+        <button onclick="adminStartGame()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 font-bold text-xs text-slate-950 shadow-lg flex items-center justify-center gap-2">
+          <i class="fa-solid fa-play"></i>
+          <span>Start / Restart Game Timer</span>
+        </button>
+
+        <button onclick="adminEndGame()" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 font-bold text-xs text-slate-950 shadow-lg flex items-center justify-center gap-2">
+          <i class="fa-solid fa-flag-checkered"></i>
+          <span>End Game (Reveal All Challenges)</span>
+        </button>
+
+        <button onclick="adminResetBoard()" class="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white shadow-lg flex items-center justify-center gap-2">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>Reset Map & Scores</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* =========================================================================
+       FIREBASE CONFIGURATION & INITIALIZATION
+       ========================================================================= */
+    const firebaseConfig = {
+      apiKey: "AIzaSyCi99BPiSQf6Hb7nxqSXzMKjHlekxwyH68",
+      authDomain: "hkrailrush.firebaseapp.com",
+      projectId: "hkrailrush",
+      storageBucket: "hkrailrush.firebasestorage.app",
+      messagingSenderId: "375774433829",
+      appId: "1:375774433829:web:a2d03d0edbdcfb41dda5cc",
+      measurementId: "G-JNBJSWZKG1"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    // App ID & Firestore document path mandate compliance
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'hkrailrush';
+    const gameStateRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('gamestate').doc('current');
+
+    /* =========================================================================
+       GAME STATE DATA STRUCTURE
+       ========================================================================= */
+    let currentActiveTeam = 'Sureman'; // Default selected team
+    let selectedChipDeposit = 1;
+    let selectedStationId = null;
+    let selectedChallengeId = null;
+
+    // Master state object synced with Firebase
+    let gameState = {
+      gameStarted: false,
+      gameEnded: false,
+      startTimeHKT: null,
+      scores: {
+        Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
+        Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
+      },
+      stations: {}, // stationId -> { owner: 'None'|'Sureman'|'Yeung', coins: 0 }
+      activeChallenges: [], // Array of challenge IDs currently active on board (max 7)
+      completedChallenges: [], // Array of challenge IDs cleared
+      failedChallenges: { Sureman: [], Yeung: [] }, // Team failures
+      history: [] // For global undo capability
+    };
+
+    function selectTeam(teamName) {
+      currentActiveTeam = teamName;
+
+      // Reset styles
+      document.getElementById('team-sureman-card').classList.remove('border-orange-500', 'bg-orange-900/30');
+      document.getElementById('team-sureman-card').classList.add('border-transparent');
+      
+      document.getElementById('team-yeung-card').classList.remove('border-green-500', 'bg-green-900/30');
+      document.getElementById('team-yeung-card').classList.add('border-transparent');
+
+      document.getElementById('sureman-active-badge').classList.add('hidden');
+      document.getElementById('yeung-active-badge').classList.add('hidden');
+
+      // Apply active styles
+      if (teamName === 'Sureman') {
+        document.getElementById('team-sureman-card').classList.remove('border-transparent');
+        document.getElementById('team-sureman-card').classList.add('border-orange-500', 'bg-orange-900/30');
+        document.getElementById('sureman-active-badge').classList.remove('hidden');
+      } else {
+        document.getElementById('team-yeung-card').classList.remove('border-transparent');
+        document.getElementById('team-yeung-card').classList.add('border-green-500', 'bg-green-900/30');
+        document.getElementById('yeung-active-badge').classList.remove('hidden');
+      }
+    }
+
+    function pushUndoState(actionName) {
+      if (!gameState.history) gameState.history = [];
+      const snapshot = {
+        actionName: actionName,
+        scores: JSON.parse(JSON.stringify(gameState.scores)),
+        stations: JSON.parse(JSON.stringify(gameState.stations)),
+        activeChallenges: [...(gameState.activeChallenges || [])],
+        completedChallenges: [...(gameState.completedChallenges || [])],
+        failedChallenges: JSON.parse(JSON.stringify(gameState.failedChallenges || { Sureman: [], Yeung: [] }))
+      };
+      gameState.history.push(snapshot);
+      // Keep last 10 actions to prevent large payload sizes
+      if (gameState.history.length > 10) gameState.history.shift(); 
+    }
+
+    function executeUndo() {
+      if (!gameState.history || gameState.history.length === 0) {
+        showToast("Nothing to undo!");
+        return;
+      }
+      const snapshot = gameState.history.pop();
+      
+      gameState.scores = snapshot.scores;
+      gameState.stations = snapshot.stations;
+      gameState.activeChallenges = snapshot.activeChallenges;
+      gameState.completedChallenges = snapshot.completedChallenges;
+      gameState.failedChallenges = snapshot.failedChallenges;
+
+      showToast("Undid action: " + snapshot.actionName);
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    /* =========================================================================
+       HK LINES & REAL GPS STATIONS DEFINITIONS
+       ========================================================================= */
+    const LINES_DATA = {
+      "Tuen Ma Line": { color: "#920783", stations: [
+        { id: "TM-01", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
+        { id: "TM-02", name: "Siu Hong", lat: 22.4116, lng: 113.9782 },
+        { id: "TM-03", name: "Tin Shui Wai", lat: 22.4452, lng: 114.0026 },
+        { id: "TM-04", name: "Long Ping", lat: 22.4475, lng: 114.0252 },
+        { id: "TM-05", name: "Yuen Long", lat: 22.4451, lng: 114.0357 },
+        { id: "TM-06", name: "Kam Sheung Rd", lat: 22.4344, lng: 114.0655 },
+        { id: "TM-07", name: "Tsuen Wan West", lat: 22.3683, lng: 114.1114 },
+        { id: "TM-08", name: "Mei Foo", lat: 22.3369, lng: 114.1388 },
+        { id: "TM-09", name: "Nam Cheong", lat: 22.3256, lng: 114.1534 },
+        { id: "TM-10", name: "Austin", lat: 22.3050, lng: 114.1664 },
+        { id: "TM-11", name: "East TST", lat: 22.2969, lng: 114.1746 },
+        { id: "TM-12", name: "Hung Hom", lat: 22.3031, lng: 114.1818 },
+        { id: "TM-13", name: "Ho Man Tin", lat: 22.3094, lng: 114.1824 },
+        { id: "TM-14", name: "To Kwa Wan", lat: 22.3188, lng: 114.1882 },
+        { id: "TM-15", name: "Sung Wong Toi", lat: 22.3275, lng: 114.1888 },
+        { id: "TM-16", name: "Kai Tak", lat: 22.3312, lng: 114.1983 },
+        { id: "TM-17", name: "Diamond Hill", lat: 22.3400, lng: 114.2016 },
+        { id: "TM-18", name: "Hin Keng", lat: 22.3614, lng: 114.1728 },
+        { id: "TM-19", name: "Tai Wai", lat: 22.3727, lng: 114.1785 },
+        { id: "TM-20", name: "Che Kung Temple", lat: 22.3753, lng: 114.1862 },
+        { id: "TM-21", name: "Sha Tin Wai", lat: 22.3770, lng: 114.1952 },
+        { id: "TM-22", name: "City One", lat: 22.3833, lng: 114.2036 },
+        { id: "TM-23", name: "Shek Mun", lat: 22.3881, lng: 114.2082 },
+        { id: "TM-24", name: "Tai Shui Hang", lat: 22.4082, lng: 114.2216 },
+        { id: "TM-25", name: "Heng On", lat: 22.4182, lng: 114.2263 },
+        { id: "TM-26", name: "Ma On Shan", lat: 22.4255, lng: 114.2318 },
+        { id: "TM-27", name: "Wu Kai Sha", lat: 22.4285, lng: 114.2388 }
+      ]},
+      "Tsuen Wan Line": { color: "#E60012", stations: [
+        { id: "TW-01", name: "Tsuen Wan", lat: 22.3737, lng: 114.1178 },
+        { id: "TW-02", name: "Tai Wo Hau", lat: 22.3708, lng: 114.1268 },
+        { id: "TW-03", name: "Kwai Hing", lat: 22.3631, lng: 114.1311 },
+        { id: "TW-04", name: "Kwai Fong", lat: 22.3575, lng: 114.1283 },
+        { id: "TW-05", name: "Lai King", lat: 22.3486, lng: 114.1272 },
+        { id: "TW-06", name: "Mei Foo", lat: 22.3369, lng: 114.1388 },
+        { id: "TW-07", name: "Lai Chi Kok", lat: 22.3364, lng: 114.1486 },
+        { id: "TW-08", name: "Cheung Sha Wan", lat: 22.3352, lng: 114.1561 },
+        { id: "TW-09", name: "Sham Shui Po", lat: 22.3308, lng: 114.1611 },
+        { id: "TW-10", name: "Prince Edward", lat: 22.3244, lng: 114.1683 },
+        { id: "TW-11", name: "Mong Kok", lat: 22.3193, lng: 114.1694 },
+        { id: "TW-12", name: "Yau Ma Tei", lat: 22.3131, lng: 114.1706 },
+        { id: "TW-13", name: "Jordan", lat: 22.3047, lng: 114.1717 },
+        { id: "TW-14", name: "Tsim Sha Tsui", lat: 22.2975, lng: 114.1722 },
+        { id: "TW-15", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "TW-16", name: "Central", lat: 22.2819, lng: 114.1582 }
+      ]},
+      "Kwun Tong Line": { color: "#00AB4E", stations: [
+        { id: "KT-01", name: "Whampoa", lat: 22.3049, lng: 114.1897 },
+        { id: "KT-02", name: "Ho Man Tin", lat: 22.3094, lng: 114.1824 },
+        { id: "KT-03", name: "Yau Ma Tei", lat: 22.3131, lng: 114.1706 },
+        { id: "KT-04", name: "Mong Kok", lat: 22.3193, lng: 114.1694 },
+        { id: "KT-05", name: "Prince Edward", lat: 22.3244, lng: 114.1683 },
+        { id: "KT-06", name: "Shek Kip Mei", lat: 22.3314, lng: 114.1689 },
+        { id: "KT-07", name: "Kowloon Tong", lat: 22.3370, lng: 114.1761 },
+        { id: "KT-08", name: "Lok Fu", lat: 22.3386, lng: 114.1869 },
+        { id: "KT-09", name: "Wong Tai Sin", lat: 22.3417, lng: 114.1953 },
+        { id: "KT-10", name: "Diamond Hill", lat: 22.3400, lng: 114.2016 },
+        { id: "KT-11", name: "Choi Hung", lat: 22.3347, lng: 114.2089 },
+        { id: "KT-12", name: "Kowloon Bay", lat: 22.3238, lng: 114.2142 },
+        { id: "KT-13", name: "Ngau Tau Kok", lat: 22.3153, lng: 114.2188 },
+        { id: "KT-14", name: "Kwun Tong", lat: 22.3125, lng: 114.2264 },
+        { id: "KT-15", name: "Lam Tin", lat: 22.3061, lng: 114.2333 },
+        { id: "KT-16", name: "Yau Tong", lat: 22.2978, lng: 114.2372 },
+        { id: "KT-17", name: "Tiu Keng Leng", lat: 22.3028, lng: 114.2528 }
+      ]},
+      "Island Line": { color: "#007DC3", stations: [
+        { id: "IS-01", name: "Kennedy Town", lat: 22.2814, lng: 114.1286 },
+        { id: "IS-02", name: "HKU", lat: 22.2842, lng: 114.1350 },
+        { id: "IS-03", name: "Sai Ying Pun", lat: 22.2861, lng: 114.1428 },
+        { id: "IS-04", name: "Sheung Wan", lat: 22.2867, lng: 114.1522 },
+        { id: "IS-05", name: "Central", lat: 22.2819, lng: 114.1582 },
+        { id: "IS-06", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "IS-07", name: "Wan Chai", lat: 22.2778, lng: 114.1731 },
+        { id: "IS-08", name: "Causeway Bay", lat: 22.2803, lng: 114.1850 },
+        { id: "IS-09", name: "Tin Hau", lat: 22.2822, lng: 114.1917 },
+        { id: "IS-10", name: "Fortress Hill", lat: 22.2883, lng: 114.1936 },
+        { id: "IS-11", name: "North Point", lat: 22.2911, lng: 114.2006 },
+        { id: "IS-12", name: "Quarry Bay", lat: 22.2881, lng: 114.2097 },
+        { id: "IS-13", name: "Tai Koo", lat: 22.2847, lng: 114.2161 },
+        { id: "IS-14", name: "Sai Wan Ho", lat: 22.2822, lng: 114.2222 },
+        { id: "IS-15", name: "Shau Kei Wan", lat: 22.2794, lng: 114.2286 },
+        { id: "IS-16", name: "Heng Fa Chuen", lat: 22.2764, lng: 114.2400 },
+        { id: "IS-17", name: "Chai Wan", lat: 22.2647, lng: 114.2367 }
+      ]},
+      "Tung Chung Line": { color: "#F38B00", stations: [
+        { id: "TC-01", name: "Tung Chung", lat: 22.2892, lng: 113.9414 },
+        { id: "TC-02", name: "Sunny Bay", lat: 22.3314, lng: 114.0281 },
+        { id: "TC-03", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 },
+        { id: "TC-04", name: "Lai King", lat: 22.3486, lng: 114.1272 },
+        { id: "TC-05", name: "Nam Cheong", lat: 22.3256, lng: 114.1534 },
+        { id: "TC-06", name: "Olympic", lat: 22.3175, lng: 114.1603 },
+        { id: "TC-07", name: "Kowloon", lat: 22.3053, lng: 114.1614 },
+        { id: "TC-08", name: "Hong Kong", lat: 22.2847, lng: 114.1581 }
+      ]},
+      "Disneyland Resort Line": { color: "#F550A1", stations: [
+        { id: "DR-01", name: "Sunny Bay", lat: 22.3314, lng: 114.0281 },
+        { id: "DR-02", name: "Disneyland", lat: 22.3153, lng: 114.0447 }
+      ]},
+      "East Rail Line": { color: "#53B7E8", stations: [
+        { id: "ER-01", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "ER-02", name: "Exhibition Centre", lat: 22.2819, lng: 114.1758 },
+        { id: "ER-03", name: "Hung Hom", lat: 22.3031, lng: 114.1818 },
+        { id: "ER-04", name: "Mong Kok East", lat: 22.3222, lng: 114.1719 },
+        { id: "ER-05", name: "Kowloon Tong", lat: 22.3370, lng: 114.1761 },
+        { id: "ER-06", name: "Tai Wai", lat: 22.3727, lng: 114.1785 },
+        { id: "ER-07", name: "Sha Tin", lat: 22.3828, lng: 114.1878 },
+        { id: "ER-08", name: "Fo Tan", lat: 22.3961, lng: 114.1953 },
+        { id: "ER-09", name: "University", lat: 22.4131, lng: 114.2100 },
+        { id: "ER-10", name: "Tai Po Market", lat: 22.4447, lng: 114.1700 },
+        { id: "ER-11", name: "Tai Wo", lat: 22.4508, lng: 114.1614 },
+        { id: "ER-12", name: "Fanling", lat: 22.4925, lng: 114.1389 },
+        { id: "ER-13", name: "Sheung Shui", lat: 22.5014, lng: 114.1278 }
+      ]},
+      "South Island Line": { color: "#B5BD00", stations: [
+        { id: "SIL-01", name: "Admiralty", lat: 22.2792, lng: 114.1650 },
+        { id: "SIL-02", name: "Ocean Park", lat: 22.2472, lng: 114.1736 },
+        { id: "SIL-03", name: "Wong Chuk Hang", lat: 22.2481, lng: 114.1681 },
+        { id: "SIL-04", name: "Lei Tung", lat: 22.2425, lng: 114.1561 },
+        { id: "SIL-05", name: "South Horizons", lat: 22.2436, lng: 114.1481 }
+      ]},
+      "Tseung Kwan O Line": { color: "#8D3685", stations: [
+        { id: "TKO-01", name: "North Point", lat: 22.2911, lng: 114.2006 },
+        { id: "TKO-02", name: "Quarry Bay", lat: 22.2881, lng: 114.2097 },
+        { id: "TKO-03", name: "Yau Tong", lat: 22.2978, lng: 114.2372 },
+        { id: "TKO-04", name: "Tiu Keng Leng", lat: 22.3028, lng: 114.2528 },
+        { id: "TKO-05", name: "Tseung Kwan O", lat: 22.3075, lng: 114.2600 },
+        { id: "TKO-06", name: "Hang Hau", lat: 22.3156, lng: 114.2644 },
+        { id: "TKO-07", name: "Po Lam", lat: 22.3225, lng: 114.2578 },
+        { id: "TKO-08", name: "LOHAS Park", lat: 22.2953, lng: 114.2689 }
+      ]},
+      /* Custom Bus Lines */
+      "Tuen Tsuen Line": { color: "#E01B84", stations: [
+        { id: "TTL-01", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
+        { id: "TTL-02", name: "Gold Coast", lat: 22.3714, lng: 113.9928 },
+        { id: "TTL-03", name: "Tai Lam", lat: 22.3619, lng: 114.0189 },
+        { id: "TTL-04", name: "Sham Tseng", lat: 22.3672, lng: 114.0531 },
+        { id: "TTL-05", name: "Belvedere Garden", lat: 22.3711, lng: 114.1011 },
+        { id: "TTL-06", name: "Tsuen Wan West", lat: 22.3683, lng: 114.1114 }
+      ]},
+      "Northern Link": { color: "#D80073", stations: [
+        { id: "NL-01", name: "Yuen Long", lat: 22.4451, lng: 114.0357 },
+        { id: "NL-02", name: "Ngau Tam Mei", lat: 22.4681, lng: 114.0583 },
+        { id: "NL-03", name: "San Tin", lat: 22.4914, lng: 114.0750 },
+        { id: "NL-04", name: "Kwu Tung", lat: 22.5050, lng: 114.1014 },
+        { id: "NL-05", name: "Sheung Shui", lat: 22.5014, lng: 114.1278 }
+      ]},
+      "Sai Kung Line": { color: "#00FF66", stations: [
+        { id: "SK-01", name: "Wu Kai Sha", lat: 22.4285, lng: 114.2388 },
+        { id: "SK-02", name: "GO Park", lat: 22.4181, lng: 114.2533 },
+        { id: "SK-03", name: "Wong Chuk Wan", lat: 22.3956, lng: 114.2725 },
+        { id: "SK-04", name: "Sai Kung", lat: 22.3814, lng: 114.2708 },
+        { id: "SK-05", name: "Ho Chung", lat: 22.3533, lng: 114.2558 },
+        { id: "SK-06", name: "Tseng Lan Shue", lat: 22.3331, lng: 114.2333 },
+        { id: "SK-07", name: "Choi Hung", lat: 22.3347, lng: 114.2089 }
+      ]},
+      "UST Line": { color: "#800000", stations: [
+        { id: "UST-01", name: "Hang Hau", lat: 22.3156, lng: 114.2644 },
+        { id: "UST-02", name: "Clear Water Bay", lat: 22.2883, lng: 114.2883 },
+        { id: "UST-03", name: "HKUST", lat: 22.3364, lng: 114.2636 },
+        { id: "UST-04", name: "Tseng Lan Shue", lat: 22.3331, lng: 114.2333 },
+        { id: "UST-05", name: "Choi Hung", lat: 22.3347, lng: 114.2089 }
+      ]},
+      "Tsing Yi Circular": { color: "#008080", stations: [
+        { id: "TY-01", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 },
+        { id: "TY-02", name: "Tivoli Garden", lat: 22.3525, lng: 114.1056 },
+        { id: "TY-03", name: "Cheung Hong", lat: 22.3481, lng: 114.1033 },
+        { id: "TY-04", name: "Cheung Ching", lat: 22.3469, lng: 114.1083 },
+        { id: "TY-05", name: "Tsing Yi", lat: 22.3583, lng: 114.1072 }
+      ]},
+      "West Island Line": { color: "#FFD700", stations: [
+        { id: "WIL-01", name: "HKU", lat: 22.2842, lng: 114.1350 },
+        { id: "WIL-02", name: "Queen Mary Hospital", lat: 22.2700, lng: 114.1311 },
+        { id: "WIL-03", name: "Wah Fu", lat: 22.2519, lng: 114.1378 },
+        { id: "WIL-04", name: "Tin Wan", lat: 22.2522, lng: 114.1528 },
+        { id: "WIL-05", name: "Aberdeen", lat: 22.2481, lng: 114.1558 },
+        { id: "WIL-06", name: "Wong Chuk Hang", lat: 22.2481, lng: 114.1681 }
+      ]},
+      "Stanley Line": { color: "#1E90FF", stations: [
+        { id: "STL-01", name: "Ocean Park", lat: 22.2472, lng: 114.1736 },
+        { id: "STL-02", name: "Repulse Bay", lat: 22.2369, lng: 114.1967 },
+        { id: "STL-03", name: "Stanley", lat: 22.2192, lng: 114.2125 },
+        { id: "STL-04", name: "Tai Tam", lat: 22.2417, lng: 114.2236 },
+        { id: "STL-05", name: "Chai Wan Gap", lat: 22.2614, lng: 114.2289 },
+        { id: "STL-06", name: "Sai Wan Ho", lat: 22.2822, lng: 114.2222 }
+      ]}
+    };
+
+    /* =========================================================================
+       CHALLENGE DATABASE (Station, Title, Desc, Type, Reward)
+       ========================================================================= */
+    const CHALLENGES_DATABASE = [
+      { id: "CH-01", stationId: "TM-01", title: "Tuen Mun River Dash", desc: "Run a 400m sprint along Tuen Mun River park area and post a video proof.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-02", stationId: "TW-15", title: "Admiralty Interchange Speed", desc: "Navigate from Island Line platform to South Island Line platform within 90 seconds.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-03", stationId: "IS-05", title: "Central Mid-Levels Escalator Challenge", desc: "Take the escalator up 3 full sections without stopping or touching handrails.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-04", stationId: "DR-02", title: "Disneyland Magic Call", desc: "Call your shot: Name 5 Disney movies in under 15 seconds or get 0 chips.", type: "Variable", reward: 0 },
+      { id: "CH-05", stationId: "KT-11", title: "Choi Hung Rainbow Photo", desc: "Take a selfie with the iconic colored basketball court background.", type: "Fixed Reward", reward: 10 },
+      { id: "CH-06", stationId: "SK-04", title: "Sai Kung Seafood Quiz", desc: "Name 3 local seafood species sold at Sai Kung Pier.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-07", stationId: "UST-03", title: "HKUST Atrium Shoutout", desc: "Take a picture of the HKUST Red Bird Sundial sculpture.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-08", stationId: "STL-03", title: "Stanley Beach Chip Heist", desc: "Steal 20% of opponent's current chip balance (rounded up).", type: "Steal", stealPercent: 0.20, reward: 0 },
+      { id: "CH-09", stationId: "TC-01", title: "Tung Chung Cable Car Sight", desc: "Find a vantage point and photograph 2 Ngong Ping cable cars in 1 frame.", type: "Fixed Reward", reward: 16 },
+      { id: "CH-10", stationId: "ER-07", title: "Sha Tin Town Park Sprint", desc: "Call your shot: Estimate exact walking time to Sha Tin Town Hall ± 15 sec.", type: "Variable", reward: 0 },
+      { id: "CH-11", stationId: "TW-14", title: "TST Promenade Walk", desc: "Walk to Avenue of Stars and touch Bruce Lee's statue base.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-12", stationId: "KT-07", title: "Kowloon Tong Hub Heist", desc: "Steal 15% of opponent's chips.", type: "Steal", stealPercent: 0.15, reward: 0 },
+      { id: "CH-13", stationId: "TM-27", title: "Wu Kai Sha Sunset Point", desc: "Take a photo of the Tolo Harbour coastline from Wu Kai Sha pier.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-14", stationId: "SIL-02", title: "Ocean Park Roller Coaster Spot", desc: "Spot the coaster tracks from station concourse and photo them.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-15", stationId: "IS-08", title: "Causeway Bay Shopping Dash", desc: "Call your shot: Buy any item for under HK$10 and show receipt.", type: "Variable", reward: 0 },
+      { id: "CH-16", stationId: "TW-01", title: "Tsuen Wan Overpass Maze", desc: "Traverse 3 connected footbridges without dropping to street level.", type: "Fixed Reward", reward: 16 },
+      { id: "CH-17", stationId: "KT-01", title: "Whampoa Ship Building", desc: "Take a picture inside the Whampoa Boat Shopping Mall concourse.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-18", stationId: "ER-13", title: "Sheung Shui Frontier View", desc: "Find the northernmost exit and record a 5-sec video looking north.", type: "Fixed Reward", reward: 20 },
+      { id: "CH-19", stationId: "WIL-02", title: "Queen Mary Hill Climb", desc: "Climb the main access stairs from Pok Fu Lam Road in under 2 mins.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-20", stationId: "TY-01", title: "Tsing Yi Bridge View", desc: "Photograph the Tsing Tsuen Bridge from Maritime Square deck.", type: "Fixed Reward", reward: 14 },
+      { id: "CH-21", stationId: "TW-11", title: "Mong Kok Street Food", desc: "Buy a skewer of curry fishballs and take a photo eating it.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-22", stationId: "IS-07", title: "Wan Chai Ferry Sprint", desc: "Sprint from Wan Chai station to the Star Ferry Pier in under 8 mins.", type: "Fixed Reward", reward: 20 },
+      { id: "CH-23", stationId: "KT-14", title: "Kwun Tong Promenade", desc: "Take a photo of the old industrial crane structure at the promenade.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-24", stationId: "TM-12", title: "Hung Hom Colosseum Call", desc: "Call your shot: Name 5 artists who performed at the HK Coliseum.", type: "Variable", reward: 0 },
+      { id: "CH-25", stationId: "ER-10", title: "Tai Po Railway Museum", desc: "Take a picture with the vintage train cars at the Railway Museum.", type: "Fixed Reward", reward: 18 },
+      { id: "CH-26", stationId: "TC-06", title: "Olympic Gold Pose", desc: "Do a victory pose in front of the Olympic station plaza rings.", type: "Fixed Reward", reward: 10 },
+      { id: "CH-27", stationId: "NL-01", title: "Yuen Long Light Rail Catch", desc: "Take a photo of two Light Rail trains passing each other.", type: "Fixed Reward", reward: 15 },
+      { id: "CH-28", stationId: "TKO-05", title: "TKO Bike Path Dash", desc: "Find a shared bike and ride 500m along the TKO cycle track.", type: "Fixed Reward", reward: 22 },
+      { id: "CH-29", stationId: "IS-04", title: "Sheung Wan Dried Seafood", desc: "Find a shop selling dried scallops and ask for the price.", type: "Fixed Reward", reward: 12 },
+      { id: "CH-30", stationId: "TW-09", title: "Sham Shui Po Tech Hunt", desc: "Golden Computer Arcade: Find and photograph a floppy disk or retro game.", type: "Fixed Reward", reward: 18 }
+    ];
+
+    /* =========================================================================
+       MAP INITIALIZATION & MAP MARKER RENDERING
+       ========================================================================= */
+    let map = L.map('map', {
+      center: [22.35, 114.15],
+      zoom: 11,
+      zoomControl: false,
+      preferCanvas: true // Use canvas for lines to optimize mobile rendering
+    });
+
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // CartoDB Dark Matter tiles (Fixes 403 issues and looks great)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap contributors & CARTO'
+    }).addTo(map);
+
+    // Dictionaries for fast lookups
+    let stationMapObjects = {}; // stationId -> { marker, stationData, lineData }
+    let uniqueStations = {}; // id -> station object
+
+    function initializeMapElements() {
+      const lineNames = Object.keys(LINES_DATA);
+
+      // 1. Draw Polylines for each line (Exact station overlap)
+      lineNames.forEach((lineName, index) => {
+        const line = LINES_DATA[lineName];
+        
+        // Exact station coordinates without offset to ensure lines pass perfectly through
+        const latLngs = line.stations.map(s => [s.lat, s.lng]);
+
+        L.polyline(latLngs, {
+          color: line.color,
+          weight: 4,
+          opacity: 0.85,
+          lineJoin: 'round'
+        }).addTo(map);
+
+        // 2. Process Stations
+        line.stations.forEach(st => {
+          uniqueStations[st.id] = { ...st, lineName, lineColor: line.color };
+          
+          if (!gameState.stations[st.id]) {
+            gameState.stations[st.id] = { owner: 'None', coins: 0 };
+          }
+        });
+      });
+
+      // Render station markers with station names beneath them
+      Object.keys(uniqueStations).forEach(stId => {
+        const st = uniqueStations[stId];
+        
+        const wrapper = document.createElement('div');
+        wrapper.className = 'relative flex flex-col items-center justify-center';
+
+        const circle = document.createElement('div');
+        circle.className = 'station-marker station-unclaimed w-7 h-7 cursor-pointer z-10 relative';
+        circle.id = `marker-circle-${st.id}`;
+        // Wrap the text in a span so it doesn't overwrite child badges later
+        circle.innerHTML = `<span class="station-coin-text">0</span>`;
+
+        const label = document.createElement('div');
+        label.className = 'absolute top-7 text-[10px] font-bold text-white whitespace-nowrap z-20 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md border border-slate-700/50 pointer-events-none drop-shadow-md';
+        label.innerText = st.name;
+
+        wrapper.appendChild(circle);
+        wrapper.appendChild(label);
+
+        const customIcon = L.divIcon({
+          html: wrapper,
+          className: '',
+          iconSize: [28, 50],
+          iconAnchor: [14, 14]
+        });
+
+        const marker = L.marker([st.lat, st.lng], { icon: customIcon }).addTo(map);
+        marker.on('click', () => onStationClicked(st.id));
+
+        stationMapObjects[st.id] = { marker, stationData: st };
+      });
+    }
+
+    /* =========================================================================
+       REALTIME CLOCK & HOURLY REWARD SCALING
+       ========================================================================= */
+    function updateClockAndElapsed() {
+      const now = new Date();
+      
+      // Format current time in HKT (Asia/Hong_Kong)
+      const hktString = now.toLocaleTimeString('en-US', {
+        timeZone: 'Asia/Hong_Kong',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      document.getElementById('clock-hkt').innerText = hktString;
+
+      // Elapsed time calculation if game started
+      if (gameState.gameStarted && gameState.startTimeHKT) {
+        const startMs = new Date(gameState.startTimeHKT).getTime();
+        const diffMs = Math.max(0, now.getTime() - startMs);
+
+        const totalSecs = Math.floor(diffMs / 1000);
+        const hrs = Math.floor(totalSecs / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
+
+        document.getElementById('elapsed-time').innerText = 
+          `Elapsed: ${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+        
+        document.getElementById('admin-start-time-text').innerText = 
+          new Date(gameState.startTimeHKT).toLocaleTimeString('en-US', { timeZone: 'Asia/Hong_Kong', hour12: false });
+        document.getElementById('admin-status-text').innerText = gameState.gameEnded ? "Game Ended" : "Active";
+      } else {
+        document.getElementById('elapsed-time').innerText = "Elapsed: 00:00:00";
+        document.getElementById('admin-start-time-text').innerText = "Not Started";
+        document.getElementById('admin-status-text').innerText = "Not Started";
+      }
+    }
+
+    setInterval(updateClockAndElapsed, 1000);
+
+    // Returns hourly bonus (+2 per hour elapsed)
+    function getHourlyChallengeBonus() {
+      if (!gameState.gameStarted || !gameState.startTimeHKT) return 0;
+      const startMs = new Date(gameState.startTimeHKT).getTime();
+      const elapsedHours = Math.floor((Date.now() - startMs) / (1000 * 60 * 60));
+      return Math.max(0, elapsedHours * 2);
+    }
+
+    /* =========================================================================
+       STATION CLAIMING & CHIP PLACEMENT ENGINE
+       ========================================================================= */
+    function onStationClicked(stationId) {
+      if (!gameState.gameStarted) {
+        showToast("The game has not started yet!");
+        return;
+      }
+
+      selectedStationId = stationId;
+      const stData = uniqueStations[stationId];
+      const stState = gameState.stations[stationId] || { owner: 'None', coins: 0 };
+
+      document.getElementById('modal-station-line').innerText = stData.lineName;
+      document.getElementById('modal-station-line').style.backgroundColor = stData.lineColor;
+      document.getElementById('modal-station-name').innerText = stData.name;
+
+      document.getElementById('modal-owner-text').innerText = stState.owner;
+      document.getElementById('modal-owner-text').className = `font-bold text-sm ${
+        stState.owner === 'Sureman' ? 'text-orange-400' : stState.owner === 'Yeung' ? 'text-green-400' : 'text-slate-300'
+      }`;
+      document.getElementById('modal-coins-text').innerText = `${stState.coins} chips`;
+
+      document.getElementById('modal-team-acting').innerText = currentActiveTeam;
+      document.getElementById('modal-team-acting').className = currentActiveTeam === 'Sureman' ? 'text-orange-400' : 'text-green-400';
+
+      // Check for active challenge on this station (Matching exact ID or exact Coordinates for overlapping interchange stations)
+      const activeChId = gameState.activeChallenges.find(chId => {
+        const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
+        if (!ch) return false;
+        const chStData = uniqueStations[ch.stationId];
+        return ch.stationId === stationId || (chStData && chStData.lat === stData.lat && chStData.lng === stData.lng);
+      });
+
+      const modalChallengeBtn = document.getElementById('modal-challenge-btn');
+      if (activeChId && (gameState.gameStarted || gameState.gameEnded)) {
+        modalChallengeBtn.classList.remove('hidden');
+        modalChallengeBtn.onclick = () => {
+           closeModal('station-modal');
+           openChallengeModal(activeChId);
+        };
+      } else {
+        modalChallengeBtn.classList.add('hidden');
+      }
+
+      selectChipAmount(1);
+      openModal('station-modal');
+    }
+
+    function selectChipAmount(amount) {
+      selectedChipDeposit = amount;
+      const buttons = document.querySelectorAll('.chip-opt-btn');
+      buttons.forEach((btn, index) => {
+        if (index + 1 === amount) {
+          btn.className = "chip-opt-btn bg-amber-500 border border-amber-400 rounded-xl py-2.5 font-black text-sm text-slate-950 shadow-lg shadow-amber-500/30";
+        } else {
+          btn.className = "chip-opt-btn bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-xl py-2.5 font-bold text-sm text-white";
+        }
+      });
+
+      if (selectedStationId) {
+        const stState = gameState.stations[selectedStationId] || { coins: 0 };
+        const current = stState.coins;
+        const total = current + amount;
+
+        document.getElementById('calc-current-chips').innerText = current;
+        document.getElementById('calc-addition').innerText = "+" + amount;
+        document.getElementById('calc-total-cost').innerText = total + (total === 1 ? " chip" : " chips");
+        document.getElementById('btn-confirm-chips').innerText = `Pay ${total} ${total === 1 ? 'Chip' : 'Chips'}`;
+      }
+    }
+
+    function confirmDepositChips() {
+      if (!selectedStationId) return;
+
+      const team = currentActiveTeam;
+      const chipBalance = gameState.scores[team].chips;
+
+      const stState = gameState.stations[selectedStationId];
+      const currentCoins = stState.coins || 0;
+      const totalCost = currentCoins + selectedChipDeposit;
+
+      if (chipBalance < totalCost) {
+        showToast(`Not enough chips! You need ${totalCost} chips, but only have ${chipBalance}.`);
+        return;
+      }
+
+      // Record snapshot for Undo
+      pushUndoState(`Paid ${totalCost} chips to claim ${uniqueStations[selectedStationId].name}`);
+
+      // Rule update: Cost is currentCoins + selectedChipDeposit
+      // Station's new coin balance is exactly the total cost paid
+      stState.owner = team;
+      stState.coins = totalCost;
+
+      // Deduct chips from team balance
+      gameState.scores[team].chips -= totalCost;
+      
+      showToast(`${team} paid ${totalCost} chips and claimed ${uniqueStations[selectedStationId].name}!`);
+
+      closeModal('station-modal');
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    /* =========================================================================
+       SCOREBOARD & LINE CONTROL BONUS SYSTEM
+       ========================================================================= */
+    function recalculateScoresAndRender() {
+      let controlled = { Sureman: 0, Yeung: 0 };
+      let lineBonuses = { Sureman: 0, Yeung: 0 };
+
+      // 1. Count station ownership
+      Object.keys(gameState.stations).forEach(stId => {
+        const owner = gameState.stations[stId].owner;
+        if (owner === 'Sureman' || owner === 'Yeung') {
+          controlled[owner]++;
+        }
+      });
+
+      // 2. Check full line control (+3 bonus per full line)
+      Object.keys(LINES_DATA).forEach(lineName => {
+        const line = LINES_DATA[lineName];
+        let lineOwners = line.stations.map(st => gameState.stations[st.id]?.owner || 'None');
+
+        const allSureman = lineOwners.every(o => o === 'Sureman');
+        const allYeung = lineOwners.every(o => o === 'Yeung');
+
+        if (allSureman) lineBonuses.Sureman += 3;
+        if (allYeung) lineBonuses.Yeung += 3;
+      });
+
+      // Update state scores
+      ['Sureman', 'Yeung'].forEach(t => {
+        gameState.scores[t].stationsControlled = controlled[t];
+        gameState.scores[t].lineBonuses = lineBonuses[t];
+        gameState.scores[t].totalScore = controlled[t] + lineBonuses[t];
+      });
+
+      // Update UI elements
+      document.getElementById('score-sureman').innerText = gameState.scores.Sureman.totalScore;
+      document.getElementById('chips-sureman').innerText = gameState.scores.Sureman.chips;
+
+      document.getElementById('score-yeung').innerText = gameState.scores.Yeung.totalScore;
+      document.getElementById('chips-yeung').innerText = gameState.scores.Yeung.chips;
+
+      // Render map markers visually
+      renderMapMarkers();
+    }
+
+    function renderMapMarkers() {
+      Object.keys(uniqueStations).forEach(stId => {
+        const stState = gameState.stations[stId] || { owner: 'None', coins: 0 };
+        const markerObj = stationMapObjects[stId];
+
+        if (markerObj) {
+          const el = document.getElementById(`marker-circle-${stId}`);
+          if (el) {
+            // Update the span specifically to preserve badge children
+            const textSpan = el.querySelector('.station-coin-text');
+            if (textSpan) textSpan.innerText = stState.coins || '0';
+            
+            // Set style classes
+            if (stState.owner === 'Sureman') {
+              el.className = 'station-marker station-sureman w-7 h-7 cursor-pointer z-10 relative';
+            } else if (stState.owner === 'Yeung') {
+              el.className = 'station-marker station-yeung w-7 h-7 cursor-pointer z-10 relative';
+            } else {
+              el.className = 'station-marker station-unclaimed w-7 h-7 cursor-pointer z-10 relative';
+            }
+
+            // Check if there is an active challenge for this station
+            const activeChId = gameState.activeChallenges.find(chId => {
+              const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
+              if (!ch) return false;
+              const chStData = uniqueStations[ch.stationId];
+              const currentStData = uniqueStations[stId];
+              return ch.stationId === stId || (chStData && currentStData && chStData.lat === currentStData.lat && chStData.lng === currentStData.lng);
+            });
+
+            let existingBadge = el.querySelector('.challenge-badge');
+            
+            // Only render challenges if the game is actually started or ended
+            if (activeChId && (gameState.gameStarted || gameState.gameEnded)) {
+              const ch = CHALLENGES_DATABASE.find(c => c.id === activeChId);
+              let badgeHtml = '';
+              let badgeColor = 'bg-red-500'; 
+              
+              if (ch.type === 'Fixed Reward') {
+                 const bonus = getHourlyChallengeBonus();
+                 badgeHtml = `<span class="text-[10px]">+${ch.reward + bonus}</span>`;
+                 badgeColor = 'bg-emerald-500'; 
+              } else if (ch.type === 'Variable') {
+                 badgeHtml = `<i class="fa-solid fa-bullseye text-[12px]"></i>`;
+                 badgeColor = 'bg-purple-500'; 
+              } else if (ch.type === 'Steal') {
+                 badgeHtml = `<i class="fa-solid fa-mask text-[12px]"></i>`;
+                 badgeColor = 'bg-rose-600'; 
+              }
+
+              if (!existingBadge) {
+                existingBadge = document.createElement('div');
+                existingBadge.className = `challenge-badge ${badgeColor}`;
+                el.appendChild(existingBadge);
+              } else {
+                existingBadge.className = `challenge-badge ${badgeColor}`;
+              }
+              
+              existingBadge.innerHTML = badgeHtml;
+              
+              // Attach or update the click handler to open the challenge directly
+              existingBadge.onclick = (e) => {
+                e.stopPropagation(); // Stop marker click from firing
+                if (!gameState.gameStarted) {
+                  showToast("Game has not started yet!");
+                  return;
+                }
+                openChallengeModal(activeChId);
+              };
+            } else if (existingBadge) {
+              existingBadge.remove();
+            }
+          }
+        }
+      });
+    }
+
+    /* =========================================================================
+       CHALLENGES MANAGEMENT & ROTATION SYSTEM
+       ========================================================================= */
+    function spawnChallenges(countToSpawn) {
+      const remainingPool = CHALLENGES_DATABASE.filter(c => 
+        !gameState.activeChallenges.includes(c.id) && 
+        !gameState.completedChallenges.includes(c.id)
+      );
+
+      let spawned = 0;
+      for (let i = 0; i < countToSpawn && remainingPool.length > 0; i++) {
+        const randomIndex = Math.floor(Math.random() * remainingPool.length);
+        const nextCh = remainingPool.splice(randomIndex, 1)[0];
+        gameState.activeChallenges.push(nextCh.id);
+        spawned++;
+      }
+      return spawned;
+    }
+
+    function openChallengeModal(chId) {
+      selectedChallengeId = chId;
+      const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
+      if (!ch) return;
+
+      const st = uniqueStations[ch.stationId];
+      const opponentTeam = currentActiveTeam === 'Sureman' ? 'Yeung' : 'Sureman';
+      const opponentFailed = gameState.failedChallenges[opponentTeam]?.includes(chId);
+
+      document.getElementById('ch-modal-title').innerText = ch.title;
+      document.getElementById('ch-modal-type').innerText = ch.type;
+      document.getElementById('ch-modal-station').innerText = `Location: ${st ? st.name : 'Hong Kong'}`;
+      document.getElementById('ch-modal-desc').innerText = ch.desc;
+
+      // Handle custom displays based on challenge type
+      if (ch.type === 'Variable') {
+        document.getElementById('ch-variable-input-section').classList.remove('hidden');
+        document.getElementById('ch-variable-input').value = 0;
+        
+        document.getElementById('ch-modal-base-reward').innerText = `Custom`;
+        document.getElementById('ch-modal-current-reward').innerText = opponentFailed ? `Custom x1.5` : `Custom`;
+        document.getElementById('ch-clear-reward-val').innerText = 'Custom';
+      } else if (ch.type === 'Steal') {
+        document.getElementById('ch-variable-input-section').classList.add('hidden');
+        const oppChips = gameState.scores[opponentTeam].chips;
+        const stealAmount = Math.ceil(oppChips * ch.stealPercent);
+        
+        document.getElementById('ch-modal-base-reward').innerText = `${ch.stealPercent * 100}% of ${opponentTeam}`;
+        document.getElementById('ch-modal-current-reward').innerText = `Steal ${stealAmount} chips`;
+        document.getElementById('ch-clear-reward-val').innerText = stealAmount;
+      } else {
+        document.getElementById('ch-variable-input-section').classList.add('hidden');
+        const bonus = getHourlyChallengeBonus();
+        let finalReward = ch.reward + bonus;
+        if (opponentFailed) {
+          finalReward = Math.round(finalReward * 1.5);
+        }
+        document.getElementById('ch-modal-base-reward').innerText = `${ch.reward} chips`;
+        document.getElementById('ch-modal-current-reward').innerText = `+${finalReward} chips`;
+        document.getElementById('ch-clear-reward-val').innerText = finalReward;
+      }
+
+      // Check if current team already failed this challenge
+      const hasFailed = gameState.failedChallenges[currentActiveTeam]?.includes(chId);
+      if (hasFailed) {
+        document.getElementById('ch-action-buttons').classList.add('hidden');
+        document.getElementById('ch-failed-notice').classList.remove('hidden');
+      } else {
+        document.getElementById('ch-action-buttons').classList.remove('hidden');
+        document.getElementById('ch-failed-notice').classList.add('hidden');
+      }
+
+      openModal('challenge-modal');
+    }
+
+    function resolveChallenge(action) {
+      if (!selectedChallengeId) return;
+
+      const chId = selectedChallengeId;
+      const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
+      const team = currentActiveTeam;
+      const opponentTeam = team === 'Sureman' ? 'Yeung' : 'Sureman';
+
+      pushUndoState(`${action} Challenge: ${ch.title}`);
+
+      if (action === 'CLEAR') {
+        // Calculate reward based on type
+        if (ch.type === 'Variable') {
+           let val = parseInt(document.getElementById('ch-variable-input').value) || 0;
+           if (gameState.failedChallenges[opponentTeam]?.includes(chId)) {
+               val = Math.round(val * 1.5); // Boost reward if opponent failed
+           }
+           gameState.scores[team].chips += val;
+           showToast(`${team} cleared challenge and earned +${val} chips!`);
+        } else if (ch.type === 'Steal') {
+           const oppChips = gameState.scores[opponentTeam].chips;
+           const stolenAmount = Math.ceil(oppChips * ch.stealPercent);
+           gameState.scores[opponentTeam].chips = Math.max(0, gameState.scores[opponentTeam].chips - stolenAmount);
+           gameState.scores[team].chips += stolenAmount;
+           showToast(`${team} stole ${stolenAmount} chips from ${opponentTeam}!`);
+        } else {
+           let bonus = getHourlyChallengeBonus();
+           let finalReward = ch.reward + bonus;
+           if (gameState.failedChallenges[opponentTeam]?.includes(chId)) {
+             finalReward = Math.round(finalReward * 1.5);
+           }
+           gameState.scores[team].chips += finalReward;
+           showToast(`${team} cleared challenge and earned +${finalReward} chips!`);
+        }
+
+        // Challenge Replacement Logic: max 7 active on board
+        const wasAtMax = (gameState.activeChallenges.length >= 7);
+        
+        // Remove cleared challenge from board
+        gameState.activeChallenges = gameState.activeChallenges.filter(id => id !== chId);
+        gameState.completedChallenges.push(chId);
+
+        const needed = wasAtMax ? 1 : 2;
+        spawnChallenges(needed);
+
+      } else if (action === 'FAIL') {
+        if (!gameState.failedChallenges[team]) gameState.failedChallenges[team] = [];
+        gameState.failedChallenges[team].push(chId);
+        showToast(`${team} failed challenge. Opponent reward boosted to 150%!`);
+      }
+
+      closeModal('challenge-modal');
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    /* =========================================================================
+       ADMIN PANEL & CONTROL LOGIC (PASSCODE: 8520)
+       ========================================================================= */
+    function openAdminModal() {
+      document.getElementById('admin-passcode-input').value = '';
+      document.getElementById('admin-passcode-view').classList.remove('hidden');
+      document.getElementById('admin-controls-view').classList.add('hidden');
+      openModal('admin-modal');
+    }
+
+    function verifyAdminPasscode() {
+      const val = document.getElementById('admin-passcode-input').value.trim();
+      if (val === '8520') {
+        document.getElementById('admin-passcode-view').classList.add('hidden');
+        document.getElementById('admin-controls-view').classList.remove('hidden');
+      } else {
+        showToast("Incorrect passcode!");
+      }
+    }
+
+    function adminStartGame() {
+      pushUndoState("Admin Started Game");
+      gameState.gameStarted = true;
+      gameState.gameEnded = false;
+      gameState.startTimeHKT = new Date().toISOString();
+
+      // Clear existing challenges and strictly spawn CH-01, CH-02, CH-03 to start
+      gameState.activeChallenges = ["CH-01", "CH-02", "CH-03"];
+
+      showToast("Game Timer Started in HKT!");
+      closeModal('admin-modal');
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    function adminEndGame() {
+      pushUndoState("Admin Ended Game");
+      gameState.gameEnded = true;
+
+      showToast("Game Ended! All challenges revealed on map.");
+      closeModal('admin-modal');
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    function adminResetBoard() {
+      if (!confirm("Are you sure you want to reset the entire board and scores?")) return;
+
+      pushUndoState("Admin Reset Board");
+      gameState.gameStarted = false;
+      gameState.gameEnded = false;
+      gameState.startTimeHKT = null;
+
+      gameState.scores = {
+        Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
+        Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
+      };
+
+      Object.keys(gameState.stations).forEach(id => {
+        gameState.stations[id] = { owner: 'None', coins: 0 };
+      });
+
+      gameState.activeChallenges = [];
+      gameState.completedChallenges = [];
+      gameState.failedChallenges = { Sureman: [], Yeung: [] };
+
+      showToast("Board and Scores Reset successfully!");
+      closeModal('admin-modal');
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    /* =========================================================================
+       FIREBASE REALTIME SYNC & UTILITIES
+       ========================================================================= */
+    async function initFirebaseSync() {
+      try {
+        let user = null;
+        // Check for immersive env token and apply strictly for database permissions
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          const credential = await auth.signInWithCustomToken(__initial_auth_token);
+          user = credential.user;
+        } else {
+          const credential = await auth.signInAnonymously();
+          user = credential.user;
+        }
+
+        if (!user) {
+          console.warn("Authentication failed, Firebase won't sync.");
+          return;
+        }
+        
+        // Listen to realtime changes from Firestore
+        gameStateRef.onSnapshot(docSnap => {
+          if (docSnap.exists) {
+            const data = docSnap.data();
+            if (data && data.state) {
+              gameState = data.state;
+              
+              // Apply missing defaults gracefully in case schema evolves
+              if (!gameState.failedChallenges) gameState.failedChallenges = { Sureman: [], Yeung: [] };
+              if (!gameState.history) gameState.history = [];
+              if (!gameState.stations) gameState.stations = {};
+              
+              // Ensure all stations exist in state
+              Object.keys(uniqueStations).forEach(stId => {
+                if (!gameState.stations[stId]) {
+                  gameState.stations[stId] = { owner: 'None', coins: 0 };
+                }
+              });
+
+              recalculateScoresAndRender();
+            }
+          } else {
+            // First time initialization if no firebase state exists
+            syncGameStateToFirebase();
+          }
+        }, err => {
+          console.error("Firestore listener error:", err);
+          showToast("Live sync error. Reconnecting...");
+        });
+      } catch (e) {
+        console.warn("Offline or unauthenticated.", e);
+      }
+    }
+
+    function syncGameStateToFirebase() {
+      // 1. Firebase sync if authenticated (Removed banned localStorage fallback)
+      if (!auth.currentUser) return;
+      gameStateRef.set({ state: gameState }, { merge: true }).catch(err => {
+        console.log("Firebase sync error:", err);
+      });
+    }
+
+    // Modal UI Helpers
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    // Toast notification banner
+    function showToast(msg) {
+      const toast = document.createElement('div');
+      toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 z-50 glass-panel border border-amber-500/50 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-2xl animate-bounce';
+      toast.innerText = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2500);
+    }
+
+    /* =========================================================================
+       APPLICATION BOOTSTRAP
+       ========================================================================= */
+    window.onload = function() {
+      // Initialize with fresh array before firebase loads
+      gameState.activeChallenges = [];
+
+      initializeMapElements();
+      selectTeam('Sureman');
+      initFirebaseSync();
+      recalculateScoresAndRender();
+    };
+  </script>
+</body>
+</html>
