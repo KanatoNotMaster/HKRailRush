@@ -44,6 +44,8 @@
       background-color: #0b0f19;
       color: #f1f5f9;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      /* Optimization: prevent default touch actions like double-tap zoom which causes lag */
+      touch-action: manipulation; 
     }
     
     #map {
@@ -68,8 +70,12 @@
       font-size: 11px;
       color: white;
       border: 2px solid #ffffff;
-      box-shadow: 0 0 10px rgba(0,0,0,0.8);
-      transition: all 0.3s ease;
+      /* Optimization: Reduce shadow complexity for better mobile rendering */
+      box-shadow: 0 0 6px rgba(0,0,0,0.8);
+      transition: all 0.2s ease-out;
+      /* Optimization: Hardware acceleration */
+      will-change: transform, background-color;
+      transform: translateZ(0); 
     }
 
     .station-unclaimed {
@@ -79,12 +85,12 @@
     .station-sureman {
       background: #f97316;
       border-color: #ffedd5;
-      box-shadow: 0 0 12px rgba(249, 115, 22, 0.8);
+      box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
     }
     .station-yeung {
       background: #22c55e;
       border-color: #dcfce7;
-      box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
     }
 
     .challenge-badge {
@@ -102,19 +108,23 @@
       animation: pulse 2s infinite;
       z-index: 30;
       pointer-events: auto; /* Ensure clickable */
-      box-shadow: 0 2px 5px rgba(0,0,0,0.6);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
       border: 1px solid rgba(255,255,255,0.4);
+      /* Optimization: Hint browser for animation optimization */
+      will-change: transform;
     }
 
     @keyframes pulse {
-      0% { transform: scale(0.95); }
-      50% { transform: scale(1.1); }
-      100% { transform: scale(0.95); }
+      /* Optimization: Use scale3d to force GPU hardware acceleration instead of CPU layout shifting */
+      0% { transform: scale3d(0.95, 0.95, 1); }
+      50% { transform: scale3d(1.1, 1.1, 1); }
+      100% { transform: scale3d(0.95, 0.95, 1); }
     }
 
     /* Glassmorphic UI overlays */
     .glass-panel {
       background: rgba(15, 23, 42, 0.88);
+      /* Keeping blur on large static panels, but we will remove it from 100+ map markers */
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.1);
     }
@@ -394,7 +404,6 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    // App ID & Firestore document path mandate compliance
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'hkrailrush';
     const gameStateRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('gamestate').doc('current');
 
@@ -406,6 +415,9 @@
     let selectedStationId = null;
     let selectedChallengeId = null;
     let floatingChallengeMarkers = {}; // Tracks custom coordinate challenges
+    
+    // Performance Optimization: Cache to prevent expensive DOM querying and repaints
+    let markerRenderCache = {}; 
 
     // Master state object synced with Firebase
     let gameState = {
@@ -459,7 +471,6 @@
         failedChallenges: JSON.parse(JSON.stringify(gameState.failedChallenges || { Sureman: [], Yeung: [] }))
       };
       gameState.history.push(snapshot);
-      // Keep last 10 actions to prevent large payload sizes
       if (gameState.history.length > 10) gameState.history.shift(); 
     }
 
@@ -716,29 +727,27 @@
       center: [22.35, 114.15],
       zoom: 11,
       zoomControl: false,
-      preferCanvas: true // Use canvas for lines to optimize mobile rendering
+      preferCanvas: true, // Crucial for line rendering performance
+      updateWhenZooming: false, // Prevents lag while zooming
+      updateWhenIdle: true      // Delays DOM calculation till pan stops
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // CartoDB Dark Matter tiles (Fixes 403 issues and looks great)
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 18,
       attribution: '© OpenStreetMap contributors & CARTO'
     }).addTo(map);
 
-    // Dictionaries for fast lookups
     let stationMapObjects = {}; // stationId -> { marker, stationData, lineData }
     let uniqueStations = {}; // id -> station object
 
     function initializeMapElements() {
       const lineNames = Object.keys(LINES_DATA);
 
-      // 1. Draw Polylines for each line (Exact station overlap)
-      lineNames.forEach((lineName, index) => {
+      lineNames.forEach((lineName) => {
         const line = LINES_DATA[lineName];
         
-        // Exact station coordinates without offset to ensure lines pass perfectly through
         const latLngs = line.stations.map(s => [s.lat, s.lng]);
 
         L.polyline(latLngs, {
@@ -748,7 +757,6 @@
           lineJoin: 'round'
         }).addTo(map);
 
-        // 2. Process Stations
         line.stations.forEach(st => {
           uniqueStations[st.id] = { ...st, lineName, lineColor: line.color };
           
@@ -758,7 +766,8 @@
         });
       });
 
-      // Render station markers with station names beneath them
+      // Render static DOM for markers once. 
+      // Diffing will later update only what changed.
       Object.keys(uniqueStations).forEach(stId => {
         const st = uniqueStations[stId];
         
@@ -768,11 +777,11 @@
         const circle = document.createElement('div');
         circle.className = 'station-marker station-unclaimed w-7 h-7 cursor-pointer z-10 relative';
         circle.id = `marker-circle-${st.id}`;
-        // Wrap the text in a span so it doesn't overwrite child badges later
         circle.innerHTML = `<span class="station-coin-text">0</span>`;
 
         const label = document.createElement('div');
-        label.className = 'absolute top-7 text-[10px] font-bold text-white whitespace-nowrap z-20 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-md border border-slate-700/50 pointer-events-none drop-shadow-md';
+        /* Optimization: removed backdrop-blur-md from 100+ items to prevent massive mobile lag */
+        label.className = 'absolute top-7 text-[10px] font-bold text-white whitespace-nowrap z-20 px-1.5 py-0.5 rounded bg-slate-900/95 border border-slate-700/50 pointer-events-none drop-shadow-md';
         label.innerText = st.name;
 
         wrapper.appendChild(circle);
@@ -798,7 +807,6 @@
     function updateClockAndElapsed() {
       const now = new Date();
       
-      // Format current time in HKT (Asia/Hong_Kong)
       const hktString = now.toLocaleTimeString('en-US', {
         timeZone: 'Asia/Hong_Kong',
         hour12: false,
@@ -808,7 +816,6 @@
       });
       document.getElementById('clock-hkt').innerText = hktString;
 
-      // Elapsed time calculation if game started
       if (gameState.gameStarted && gameState.startTimeHKT) {
         const startMs = new Date(gameState.startTimeHKT).getTime();
         const diffMs = Math.max(0, now.getTime() - startMs);
@@ -833,7 +840,6 @@
 
     setInterval(updateClockAndElapsed, 1000);
 
-    // Returns hourly bonus (+2 per hour elapsed)
     function getHourlyChallengeBonus() {
       if (!gameState.gameStarted || !gameState.startTimeHKT) return 0;
       const startMs = new Date(gameState.startTimeHKT).getTime();
@@ -867,7 +873,6 @@
       document.getElementById('modal-team-acting').innerText = currentActiveTeam;
       document.getElementById('modal-team-acting').className = currentActiveTeam === 'Sureman' ? 'text-orange-400' : 'text-green-400';
 
-      // Check for active challenge on this station (Matching exact ID or exact Coordinates for overlapping interchange stations)
       const activeChId = gameState.activeChallenges.find(chId => {
         const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
         if (!ch) return false;
@@ -918,7 +923,6 @@
 
       const team = currentActiveTeam;
       const chipBalance = gameState.scores[team].chips;
-
       const stState = gameState.stations[selectedStationId];
       const currentCoins = stState.coins || 0;
       const totalCost = currentCoins + selectedChipDeposit;
@@ -928,15 +932,10 @@
         return;
       }
 
-      // Record snapshot for Undo
       pushUndoState(`Paid ${totalCost} chips to claim ${uniqueStations[selectedStationId].name}`);
 
-      // Rule update: Cost is currentCoins + selectedChipDeposit
-      // Station's new coin balance is exactly the total cost paid
       stState.owner = team;
       stState.coins = totalCost;
-
-      // Deduct chips from team balance
       gameState.scores[team].chips -= totalCost;
       
       showToast(`${team} paid ${totalCost} chips and claimed ${uniqueStations[selectedStationId].name}!`);
@@ -953,26 +952,18 @@
       let controlled = { Sureman: 0, Yeung: 0 };
       let lineBonuses = { Sureman: 0, Yeung: 0 };
 
-      // 1. Count station ownership
+      // Count station ownership
       Object.keys(gameState.stations).forEach(stId => {
         const owner = gameState.stations[stId].owner;
-        if (owner === 'Sureman' || owner === 'Yeung') {
-          controlled[owner]++;
-        }
-        // Render map markers visually
-      renderMapMarkers();
-      // Add this line below to render your custom lat/lng challenges:
-      renderFloatingChallenges();
+        if (owner === 'Sureman' || owner === 'Yeung') controlled[owner]++;
       });
 
-      // 2. Check full line control (+3 bonus per full line)
+      // Check full line control
       Object.keys(LINES_DATA).forEach(lineName => {
         const line = LINES_DATA[lineName];
         let lineOwners = line.stations.map(st => gameState.stations[st.id]?.owner || 'None');
-
         const allSureman = lineOwners.every(o => o === 'Sureman');
         const allYeung = lineOwners.every(o => o === 'Yeung');
-
         if (allSureman) lineBonuses.Sureman += 3;
         if (allYeung) lineBonuses.Yeung += 3;
       });
@@ -987,15 +978,18 @@
       // Update UI elements
       document.getElementById('score-sureman').innerText = gameState.scores.Sureman.totalScore;
       document.getElementById('chips-sureman').innerText = gameState.scores.Sureman.chips;
-
       document.getElementById('score-yeung').innerText = gameState.scores.Yeung.totalScore;
       document.getElementById('chips-yeung').innerText = gameState.scores.Yeung.chips;
 
-      // Render map markers visually
+      // Render elements smartly via cache
       renderMapMarkers();
+      renderFloatingChallenges();
     }
 
     function renderMapMarkers() {
+      const bonus = getHourlyChallengeBonus();
+      const isGameActive = (gameState.gameStarted || gameState.gameEnded);
+
       Object.keys(uniqueStations).forEach(stId => {
         const stState = gameState.stations[stId] || { owner: 'None', coins: 0 };
         const markerObj = stationMapObjects[stId];
@@ -1003,20 +997,7 @@
         if (markerObj) {
           const el = document.getElementById(`marker-circle-${stId}`);
           if (el) {
-            // Update the span specifically to preserve badge children
-            const textSpan = el.querySelector('.station-coin-text');
-            if (textSpan) textSpan.innerText = stState.coins || '0';
-            
-            // Set style classes
-            if (stState.owner === 'Sureman') {
-              el.className = 'station-marker station-sureman w-7 h-7 cursor-pointer z-10 relative';
-            } else if (stState.owner === 'Yeung') {
-              el.className = 'station-marker station-yeung w-7 h-7 cursor-pointer z-10 relative';
-            } else {
-              el.className = 'station-marker station-unclaimed w-7 h-7 cursor-pointer z-10 relative';
-            }
-
-            // Check if there is an active challenge for this station
+            // Find if challenge active
             const activeChId = gameState.activeChallenges.find(chId => {
               const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
               if (!ch) return false;
@@ -1025,16 +1006,33 @@
               return ch.stationId === stId || (chStData && currentStData && chStData.lat === currentStData.lat && chStData.lng === currentStData.lng);
             });
 
+            // OPTIMIZATION: State caching to avoid repaints
+            const stateSignature = `${stState.owner}-${stState.coins}-${isGameActive ? activeChId : 'none'}-${activeChId ? bonus : 0}`;
+            if (markerRenderCache[stId] === stateSignature) return; // Unchanged, skip DOM updates!
+            
+            // Register new state
+            markerRenderCache[stId] = stateSignature;
+
+            // DOM Updates 
+            const textSpan = el.querySelector('.station-coin-text');
+            if (textSpan) textSpan.innerText = stState.coins || '0';
+            
+            if (stState.owner === 'Sureman') {
+              el.className = 'station-marker station-sureman w-7 h-7 cursor-pointer z-10 relative';
+            } else if (stState.owner === 'Yeung') {
+              el.className = 'station-marker station-yeung w-7 h-7 cursor-pointer z-10 relative';
+            } else {
+              el.className = 'station-marker station-unclaimed w-7 h-7 cursor-pointer z-10 relative';
+            }
+
             let existingBadge = el.querySelector('.challenge-badge');
             
-            // Only render challenges if the game is actually started or ended
-            if (activeChId && (gameState.gameStarted || gameState.gameEnded)) {
+            if (activeChId && isGameActive) {
               const ch = CHALLENGES_DATABASE.find(c => c.id === activeChId);
               let badgeHtml = '';
               let badgeColor = 'bg-red-500'; 
               
               if (ch.type === 'Fixed Reward') {
-                 const bonus = getHourlyChallengeBonus();
                  badgeHtml = `<span class="text-[10px]">+${ch.reward + bonus}</span>`;
                  badgeColor = 'bg-emerald-500'; 
               } else if (ch.type === 'Variable') {
@@ -1047,81 +1045,79 @@
 
               if (!existingBadge) {
                 existingBadge = document.createElement('div');
-                existingBadge.className = `challenge-badge ${badgeColor}`;
                 el.appendChild(existingBadge);
-              } else {
-                existingBadge.className = `challenge-badge ${badgeColor}`;
               }
-              
+              existingBadge.className = `challenge-badge ${badgeColor}`;
               existingBadge.innerHTML = badgeHtml;
-              
-              // Attach or update the click handler to open the challenge directly
               existingBadge.onclick = (e) => {
-                e.stopPropagation(); // Stop marker click from firing
-                if (!gameState.gameStarted) {
-                  showToast("Game has not started yet!");
-                  return;
-                }
+                e.stopPropagation();
+                if (!gameState.gameStarted) { showToast("Game has not started yet!"); return; }
                 openChallengeModal(activeChId);
               };
             } else if (existingBadge) {
               existingBadge.remove();
             }
+          } else {
+            // Marker off-screen / DOM removed by Leaflet; clear cache so it resets when panned into view
+            delete markerRenderCache[stId];
           }
         }
       });
     }
 
     function renderFloatingChallenges() {
-      // Clear existing free-floating markers
-      Object.values(floatingChallengeMarkers).forEach(m => map.removeLayer(m));
-      floatingChallengeMarkers = {};
-
-  // Only render if game is active or ended
+      // OPTIMIZATION: Only diff map additions/removals instead of tearing all down
       if (!gameState.gameStarted && !gameState.gameEnded) return;
+
+      const activeFloatingIds = {};
 
       gameState.activeChallenges.forEach(chId => {
         const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
-    
-    // Check if it's a coordinate-based challenge instead of a station-based one
         if (ch && ch.lat && ch.lng) {
-          let badgeColor = 'bg-red-500'; 
-          let iconHtml = '<i class="fa-solid fa-bolt"></i>';
+          activeFloatingIds[chId] = true;
 
-          if (ch.type === 'Fixed Reward') {
-             badgeColor = 'bg-emerald-500';
-             const bonus = getHourlyChallengeBonus();
-             iconHtml = `<span class="text-[10px]">+${ch.reward + bonus}</span>`;
-          } else if (ch.type === 'Variable') {
-             badgeColor = 'bg-purple-500';
-             iconHtml = `<i class="fa-solid fa-bullseye text-[12px]"></i>`;
-          } else if (ch.type === 'Steal') {
-             badgeColor = 'bg-rose-600';
-             iconHtml = `<i class="fa-solid fa-mask text-[12px]"></i>`;
+          // If not currently rendered, create it
+          if (!floatingChallengeMarkers[chId]) {
+            let badgeColor = 'bg-red-500'; 
+            let iconHtml = '<i class="fa-solid fa-bolt"></i>';
+
+            if (ch.type === 'Fixed Reward') {
+               badgeColor = 'bg-emerald-500';
+               const bonus = getHourlyChallengeBonus();
+               iconHtml = `<span class="text-[10px]">+${ch.reward + bonus}</span>`;
+            } else if (ch.type === 'Variable') {
+               badgeColor = 'bg-purple-500';
+               iconHtml = `<i class="fa-solid fa-bullseye text-[12px]"></i>`;
+            } else if (ch.type === 'Steal') {
+               badgeColor = 'bg-rose-600';
+               iconHtml = `<i class="fa-solid fa-mask text-[12px]"></i>`;
+            }
+
+            const wrapper = document.createElement('div');
+            wrapper.className = `challenge-badge ${badgeColor} relative z-40 cursor-pointer w-8 h-8 flex items-center justify-center`;
+            wrapper.style.top = '0';
+            wrapper.style.right = '0';
+            wrapper.innerHTML = iconHtml;
+
+            const customIcon = L.divIcon({
+              html: wrapper,
+              className: '',
+              iconSize: [32, 32],
+              iconAnchor: [16, 16]
+            });
+
+            const marker = L.marker([ch.lat, ch.lng], { icon: customIcon }).addTo(map);
+            marker.on('click', () => openChallengeModal(chId));
+            floatingChallengeMarkers[chId] = marker;
           }
+        }
+      });
 
-      // Create a standalone badge div
-          const wrapper = document.createElement('div');
-          wrapper.className = `challenge-badge ${badgeColor} relative z-40 cursor-pointer w-8 h-8 flex items-center justify-center`;
-          wrapper.style.top = '0';
-          wrapper.style.right = '0';
-          wrapper.innerHTML = iconHtml;
-
-          const customIcon = L.divIcon({
-            html: wrapper,
-            className: '',
-            iconSize: [32, 32],
-            iconAnchor: [16, 16]
-          });
-
-          const marker = L.marker([ch.lat, ch.lng], { icon: customIcon }).addTo(map);
-      
-      // Directly open the challenge modal when clicked
-          marker.on('click', () => {
-            openChallengeModal(chId);
-          });
-
-          floatingChallengeMarkers[chId] = marker;
+      // Cleanup resolved floating challenges
+      Object.keys(floatingChallengeMarkers).forEach(existingId => {
+        if (!activeFloatingIds[existingId]) {
+          map.removeLayer(floatingChallengeMarkers[existingId]);
+          delete floatingChallengeMarkers[existingId];
         }
       });
     }
@@ -1156,20 +1152,19 @@
 
       document.getElementById('ch-modal-title').innerText = ch.title;
       document.getElementById('ch-modal-type').innerText = ch.type;
+      
       if (ch.locationName) {
         document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> ${ch.locationName}`;
       } else if (st) {
         document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> ${st.name}`;
-     } else {
-       document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> Custom Location`;
-     }
+      } else {
+        document.getElementById('ch-modal-station').innerHTML = `<i class="fa-solid fa-location-dot mr-1"></i> Custom Location`;
+      }
       document.getElementById('ch-modal-desc').innerText = ch.desc;
 
-      // Handle custom displays based on challenge type
       if (ch.type === 'Variable') {
         document.getElementById('ch-variable-input-section').classList.remove('hidden');
         document.getElementById('ch-variable-input').value = 0;
-        
         document.getElementById('ch-modal-base-reward').innerText = `Custom`;
         document.getElementById('ch-modal-current-reward').innerText = opponentFailed ? `Custom x1.5` : `Custom`;
         document.getElementById('ch-clear-reward-val').innerText = 'Custom';
@@ -1177,7 +1172,6 @@
         document.getElementById('ch-variable-input-section').classList.add('hidden');
         const oppChips = gameState.scores[opponentTeam].chips;
         const stealAmount = Math.ceil(oppChips * ch.stealPercent);
-        
         document.getElementById('ch-modal-base-reward').innerText = `${ch.stealPercent * 100}% of ${opponentTeam}`;
         document.getElementById('ch-modal-current-reward').innerText = `Steal ${stealAmount} chips`;
         document.getElementById('ch-clear-reward-val').innerText = stealAmount;
@@ -1193,7 +1187,6 @@
         document.getElementById('ch-clear-reward-val').innerText = finalReward;
       }
 
-      // Check if current team already failed this challenge
       const hasFailed = gameState.failedChallenges[currentActiveTeam]?.includes(chId);
       if (hasFailed) {
         document.getElementById('ch-action-buttons').classList.add('hidden');
@@ -1217,12 +1210,9 @@
       pushUndoState(`${action} Challenge: ${ch.title}`);
 
       if (action === 'CLEAR') {
-        // Calculate reward based on type
         if (ch.type === 'Variable') {
            let val = parseInt(document.getElementById('ch-variable-input').value) || 0;
-           if (gameState.failedChallenges[opponentTeam]?.includes(chId)) {
-               val = Math.round(val * 1.5); // Boost reward if opponent failed
-           }
+           if (gameState.failedChallenges[opponentTeam]?.includes(chId)) val = Math.round(val * 1.5);
            gameState.scores[team].chips += val;
            showToast(`${team} cleared challenge and earned +${val} chips!`);
         } else if (ch.type === 'Steal') {
@@ -1241,10 +1231,7 @@
            showToast(`${team} cleared challenge and earned +${finalReward} chips!`);
         }
 
-        // Challenge Replacement Logic: max 7 active on board
         const wasAtMax = (gameState.activeChallenges.length >= 7);
-        
-        // Remove cleared challenge from board
         gameState.activeChallenges = gameState.activeChallenges.filter(id => id !== chId);
         gameState.completedChallenges.push(chId);
 
@@ -1287,10 +1274,7 @@
       gameState.gameStarted = true;
       gameState.gameEnded = false;
       gameState.startTimeHKT = new Date().toISOString();
-
-      // Clear existing challenges and strictly spawn CH-01, CH-02, CH-03 to start
       gameState.activeChallenges = ["CH-01", "CH-02", "CH-03"];
-
       showToast("Game Timer Started in HKT!");
       closeModal('admin-modal');
       recalculateScoresAndRender();
@@ -1300,7 +1284,6 @@
     function adminEndGame() {
       pushUndoState("Admin Ended Game");
       gameState.gameEnded = true;
-
       showToast("Game Ended! All challenges revealed on map.");
       closeModal('admin-modal');
       recalculateScoresAndRender();
@@ -1309,24 +1292,24 @@
 
     function adminResetBoard() {
       if (!confirm("Are you sure you want to reset the entire board and scores?")) return;
-
       pushUndoState("Admin Reset Board");
+      
       gameState.gameStarted = false;
       gameState.gameEnded = false;
       gameState.startTimeHKT = null;
-
       gameState.scores = {
         Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
         Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
       };
-
       Object.keys(gameState.stations).forEach(id => {
         gameState.stations[id] = { owner: 'None', coins: 0 };
       });
-
       gameState.activeChallenges = [];
       gameState.completedChallenges = [];
       gameState.failedChallenges = { Sureman: [], Yeung: [] };
+      
+      // OPTIMIZATION: Reset cache strictly for reset map conditions
+      markerRenderCache = {};
 
       showToast("Board and Scores Reset successfully!");
       closeModal('admin-modal');
@@ -1340,7 +1323,6 @@
     async function initFirebaseSync() {
       try {
         let user = null;
-        // Check for immersive env token and apply strictly for database permissions
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           const credential = await auth.signInWithCustomToken(__initial_auth_token);
           user = credential.user;
@@ -1354,29 +1336,21 @@
           return;
         }
         
-        // Listen to realtime changes from Firestore
         gameStateRef.onSnapshot(docSnap => {
           if (docSnap.exists) {
             const data = docSnap.data();
             if (data && data.state) {
               gameState = data.state;
-              
-              // Apply missing defaults gracefully in case schema evolves
               if (!gameState.failedChallenges) gameState.failedChallenges = { Sureman: [], Yeung: [] };
               if (!gameState.history) gameState.history = [];
               if (!gameState.stations) gameState.stations = {};
               
-              // Ensure all stations exist in state
               Object.keys(uniqueStations).forEach(stId => {
-                if (!gameState.stations[stId]) {
-                  gameState.stations[stId] = { owner: 'None', coins: 0 };
-                }
+                if (!gameState.stations[stId]) gameState.stations[stId] = { owner: 'None', coins: 0 };
               });
-
               recalculateScoresAndRender();
             }
           } else {
-            // First time initialization if no firebase state exists
             syncGameStateToFirebase();
           }
         }, err => {
@@ -1389,22 +1363,15 @@
     }
 
     function syncGameStateToFirebase() {
-      // 1. Firebase sync if authenticated (Removed banned localStorage fallback)
       if (!auth.currentUser) return;
       gameStateRef.set({ state: gameState }, { merge: true }).catch(err => {
         console.log("Firebase sync error:", err);
       });
     }
 
-    // Modal UI Helpers
-    function openModal(id) {
-      document.getElementById(id).classList.remove('hidden');
-    }
-    function closeModal(id) {
-      document.getElementById(id).classList.add('hidden');
-    }
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
-    // Toast notification banner
     function showToast(msg) {
       const toast = document.createElement('div');
       toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 z-50 glass-panel border border-amber-500/50 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-2xl animate-bounce';
@@ -1417,9 +1384,7 @@
        APPLICATION BOOTSTRAP
        ========================================================================= */
     window.onload = function() {
-      // Initialize with fresh array before firebase loads
       gameState.activeChallenges = [];
-
       initializeMapElements();
       selectTeam('Sureman');
       initFirebaseSync();
