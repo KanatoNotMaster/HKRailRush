@@ -1093,16 +1093,28 @@
                iconHtml = `<i class="fa-solid fa-mask text-[12px]"></i>`;
             }
 
+            // Create wrapper matching the station styling for labels
             const wrapper = document.createElement('div');
-            wrapper.className = `challenge-badge ${badgeColor} relative z-40 cursor-pointer w-8 h-8 flex items-center justify-center`;
-            wrapper.style.top = '0';
-            wrapper.style.right = '0';
-            wrapper.innerHTML = iconHtml;
+            wrapper.className = 'relative flex flex-col items-center justify-center';
+
+            // Create the badge icon
+            const badge = document.createElement('div');
+            badge.className = `challenge-badge ${badgeColor} relative z-40 cursor-pointer w-8 h-8 flex items-center justify-center shadow-[0_0_15px_rgba(0,0,0,0.8)] border border-white/50`;
+            badge.style.animation = "pulse 2s infinite";
+            badge.innerHTML = iconHtml;
+
+            // Create the location label
+            const label = document.createElement('div');
+            label.className = 'absolute top-9 text-[10px] font-bold text-cyan-400 whitespace-nowrap z-30 px-1.5 py-0.5 rounded bg-slate-900/95 border border-cyan-500/50 pointer-events-none drop-shadow-md';
+            label.innerHTML = `<i class="fa-solid fa-location-dot mr-1 text-[8px]"></i>${ch.locationName || 'Custom Location'}`;
+
+            wrapper.appendChild(badge);
+            wrapper.appendChild(label);
 
             const customIcon = L.divIcon({
               html: wrapper,
               className: '',
-              iconSize: [32, 32],
+              iconSize: [32, 55], // Increased height to accommodate the label below
               iconAnchor: [16, 16]
             });
 
