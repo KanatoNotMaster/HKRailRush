@@ -382,6 +382,25 @@
           <i class="fa-solid fa-trash-can"></i>
           <span>Reset Map & Scores</span>
         </button>
+
+        <div class="mt-4 pt-4 border-t border-slate-700/80">
+          <h3 class="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5"><i class="fa-solid fa-bolt text-cyan-400"></i> Manage Active Challenges</h3>
+          <div id="admin-active-challenges-list" class="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+             <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic Confirm Modal -->
+  <div id="confirm-modal" class="hidden fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-sm rounded-2xl p-5 border border-slate-700 shadow-2xl animate-fade-in text-center">
+      <h3 id="confirm-title" class="text-lg font-black text-white mb-2">Are you sure?</h3>
+      <p id="confirm-msg" class="text-xs text-slate-300 mb-5">This action cannot be undone.</p>
+      <div class="flex gap-2">
+        <button onclick="closeModal('confirm-modal')" class="flex-1 py-2.5 rounded-xl border border-slate-600 font-bold text-xs text-slate-300 hover:bg-slate-800 transition-colors">Cancel</button>
+        <button onclick="executeConfirm()" class="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white shadow-lg shadow-rose-600/20 transition-colors">Confirm</button>
       </div>
     </div>
   </div>
@@ -1264,21 +1283,103 @@
     /* =========================================================================
        ADMIN PANEL & CONTROL LOGIC (PASSCODE: 8520)
        ========================================================================= */
+    let isAdminUnlocked = false;
+    let confirmCallback = null;
+
+    function showConfirm(title, msg, callback) {
+      document.getElementById('confirm-title').innerText = title;
+      document.getElementById('confirm-msg').innerText = msg;
+      confirmCallback = callback;
+      openModal('confirm-modal');
+    }
+
+    function executeConfirm() {
+      if (confirmCallback) confirmCallback();
+      closeModal('confirm-modal');
+      confirmCallback = null;
+    }
+
     function openAdminModal() {
-      document.getElementById('admin-passcode-input').value = '';
-      document.getElementById('admin-passcode-view').classList.remove('hidden');
-      document.getElementById('admin-controls-view').classList.add('hidden');
+      if (isAdminUnlocked) {
+        document.getElementById('admin-passcode-view').classList.add('hidden');
+        document.getElementById('admin-controls-view').classList.remove('hidden');
+        populateAdminChallenges();
+      } else {
+        document.getElementById('admin-passcode-input').value = '';
+        document.getElementById('admin-passcode-view').classList.remove('hidden');
+        document.getElementById('admin-controls-view').classList.add('hidden');
+      }
       openModal('admin-modal');
     }
 
     function verifyAdminPasscode() {
       const val = document.getElementById('admin-passcode-input').value.trim();
       if (val === '8520') {
+        isAdminUnlocked = true;
         document.getElementById('admin-passcode-view').classList.add('hidden');
         document.getElementById('admin-controls-view').classList.remove('hidden');
+        populateAdminChallenges();
       } else {
         showToast("Incorrect passcode!");
       }
+    }
+
+    function populateAdminChallenges() {
+      const listContainer = document.getElementById('admin-active-challenges-list');
+      if (!listContainer) return;
+      
+      if (!gameState.activeChallenges || gameState.activeChallenges.length === 0) {
+        listContainer.innerHTML = '<div class="text-[10px] text-slate-500 italic py-2 text-center">No active challenges.</div>';
+        return;
+      }
+
+      listContainer.innerHTML = '';
+      gameState.activeChallenges.forEach(chId => {
+        const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
+        if (!ch) return;
+
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between bg-slate-800/70 p-2 rounded-lg border border-slate-700';
+        item.innerHTML = `
+          <div class="truncate pr-2 overflow-hidden">
+            <div class="text-[10px] font-bold text-cyan-400">${chId}</div>
+            <div class="text-xs text-slate-300 truncate" title="${ch.title}">${ch.title}</div>
+          </div>
+          <button onclick="adminReplaceChallenge('${chId}')" class="shrink-0 px-2.5 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 text-[10px] font-bold rounded border border-rose-500/30 transition-colors shadow-sm">
+            <i class="fa-solid fa-rotate mr-1"></i> Swap
+          </button>
+        `;
+        listContainer.appendChild(item);
+      });
+    }
+
+    function adminReplaceChallenge(oldChId) {
+      showConfirm("Swap Challenge?", "Replace this challenge? The replaced challenge will return to the available pool.", () => {
+        const remainingPool = CHALLENGES_DATABASE.filter(c => 
+          !gameState.activeChallenges.includes(c.id) && 
+          !gameState.completedChallenges.includes(c.id)
+        );
+
+        if (remainingPool.length === 0) {
+          showToast("No more challenges left in the pool!");
+          return;
+        }
+
+        pushUndoState("Admin Swapped Challenge");
+
+        // Remove old (putting it back into the pool implicitly by not adding it to 'completed')
+        gameState.activeChallenges = gameState.activeChallenges.filter(id => id !== oldChId);
+        
+        // Pick new
+        const randomIndex = Math.floor(Math.random() * remainingPool.length);
+        const newCh = remainingPool[randomIndex];
+        gameState.activeChallenges.push(newCh.id);
+
+        showToast("Challenge swapped successfully!");
+        populateAdminChallenges();
+        recalculateScoresAndRender();
+        syncGameStateToFirebase();
+      });
     }
 
     function adminStartGame() {
@@ -1288,6 +1389,7 @@
       gameState.startTimeHKT = new Date().toISOString();
       gameState.activeChallenges = ["CH-01", "CH-02", "CH-03"];
       showToast("Game Timer Started in HKT!");
+      populateAdminChallenges();
       closeModal('admin-modal');
       recalculateScoresAndRender();
       syncGameStateToFirebase();
@@ -1303,30 +1405,32 @@
     }
 
     function adminResetBoard() {
-      if (!confirm("Are you sure you want to reset the entire board and scores?")) return;
-      pushUndoState("Admin Reset Board");
-      
-      gameState.gameStarted = false;
-      gameState.gameEnded = false;
-      gameState.startTimeHKT = null;
-      gameState.scores = {
-        Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
-        Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
-      };
-      Object.keys(gameState.stations).forEach(id => {
-        gameState.stations[id] = { owner: 'None', coins: 0 };
-      });
-      gameState.activeChallenges = [];
-      gameState.completedChallenges = [];
-      gameState.failedChallenges = { Sureman: [], Yeung: [] };
-      
-      // OPTIMIZATION: Reset cache strictly for reset map conditions
-      markerRenderCache = {};
+      showConfirm("Reset Board?", "Are you sure you want to reset the entire map and scores? This cannot be undone easily.", () => {
+        pushUndoState("Admin Reset Board");
+        
+        gameState.gameStarted = false;
+        gameState.gameEnded = false;
+        gameState.startTimeHKT = null;
+        gameState.scores = {
+          Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
+          Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
+        };
+        Object.keys(gameState.stations).forEach(id => {
+          gameState.stations[id] = { owner: 'None', coins: 0 };
+        });
+        gameState.activeChallenges = [];
+        gameState.completedChallenges = [];
+        gameState.failedChallenges = { Sureman: [], Yeung: [] };
+        
+        // OPTIMIZATION: Reset cache strictly for reset map conditions
+        markerRenderCache = {};
 
-      showToast("Board and Scores Reset successfully!");
-      closeModal('admin-modal');
-      recalculateScoresAndRender();
-      syncGameStateToFirebase();
+        showToast("Board and Scores Reset successfully!");
+        populateAdminChallenges();
+        closeModal('admin-modal');
+        recalculateScoresAndRender();
+        syncGameStateToFirebase();
+      });
     }
 
     /* =========================================================================
