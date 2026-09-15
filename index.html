@@ -116,14 +116,12 @@
       100% { transform: scale3d(0.95, 0.95, 1); }
     }
 
-    /* Glassmorphic UI overlays */
     .glass-panel {
       background: rgba(15, 23, 42, 0.88);
       backdrop-filter: blur(12px);
       border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    /* Scrollbar styling */
     ::-webkit-scrollbar {
       width: 6px;
     }
@@ -163,6 +161,7 @@
         <span class="text-[10px] uppercase tracking-widest text-slate-400 font-bold">HKT Time</span>
         <span id="clock-hkt" class="text-sm font-mono font-bold text-cyan-400">00:00:00</span>
         <span id="elapsed-time" class="text-[10px] font-mono text-amber-400 font-medium">Elapsed: 00:00:00</span>
+        <span id="pause-indicator" class="hidden text-[9px] font-bold text-rose-400 bg-rose-500/20 px-1.5 py-0.5 rounded animate-pulse mt-0.5">PAUSED</span>
       </div>
 
       <!-- Yeung Team Score -->
@@ -261,10 +260,16 @@
         </p>
       </div>
 
-      <!-- Challenge Action Button (Hidden by Default) -->
+      <!-- Challenge Action Button -->
       <button id="modal-challenge-btn" class="hidden w-full mb-3 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 font-bold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center justify-center gap-2">
         <i class="fa-solid fa-bolt"></i>
         <span>View Active Challenge</span>
+      </button>
+
+      <!-- Admin Direct Neutralize Button -->
+      <button id="modal-admin-neutralize-btn" onclick="adminNeutralizeCurrentStation()" class="hidden w-full mb-3 py-2 rounded-xl bg-rose-900/40 hover:bg-rose-900/60 border border-rose-500/50 text-rose-300 font-bold text-xs flex items-center justify-center gap-2">
+        <i class="fa-solid fa-ban"></i>
+        <span>Admin: Neutralize Station</span>
       </button>
 
       <!-- Action Buttons -->
@@ -274,11 +279,6 @@
           Pay 1 Chip
         </button>
       </div>
-
-      <!-- Admin Actions -->
-      <button id="modal-admin-neutralize-btn" onclick="adminNeutralizeCurrentStation()" class="hidden w-full mt-3 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/40 border border-rose-600/50 font-bold text-xs text-rose-400 transition-colors">
-        <i class="fa-solid fa-skull"></i> Admin: Neutralize Station
-      </button>
     </div>
   </div>
 
@@ -340,7 +340,7 @@
 
   <!-- Admin Panel Passcode Modal -->
   <div id="admin-modal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-sm rounded-2xl p-5 border border-slate-700 shadow-2xl">
+    <div class="glass-panel w-full max-w-md rounded-2xl p-5 border border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex justify-between items-center mb-4">
         <h2 class="text-lg font-black text-white flex items-center gap-2">
           <i class="fa-solid fa-shield-halved text-cyan-400"></i>
@@ -360,70 +360,97 @@
         </button>
       </div>
 
-      <!-- Controls Phase (Hidden until passcode standard 8520 verified) -->
-      <div id="admin-controls-view" class="hidden h-[75vh] overflow-y-auto pr-2 space-y-4">
-        
-        <!-- Game Status -->
+      <!-- Controls Phase -->
+      <div id="admin-controls-view" class="hidden space-y-4">
         <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-xs space-y-1">
           <div><span class="text-slate-400">Game Status:</span> <span id="admin-status-text" class="font-bold text-emerald-400">In Progress</span></div>
           <div><span class="text-slate-400">Started At (HKT):</span> <span id="admin-start-time-text" class="font-mono text-cyan-300">Not Started</span></div>
         </div>
 
-        <!-- Primary Game Actions -->
-        <div class="grid grid-cols-2 gap-2">
-          <button onclick="adminStartGame()" class="py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 font-bold text-xs text-slate-950 shadow-lg flex flex-col items-center justify-center gap-1 transition-colors">
-            <i class="fa-solid fa-play"></i> Start / Restart
-          </button>
-          <button id="admin-pause-btn" onclick="adminTogglePause()" class="py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 font-bold text-xs text-slate-950 shadow-lg flex flex-col items-center justify-center gap-1 transition-colors">
-            <i class="fa-solid fa-pause"></i> <span id="admin-pause-btn-text">Pause</span>
-          </button>
-          <button onclick="adminEndGame()" class="py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 font-bold text-xs text-slate-950 shadow-lg flex flex-col items-center justify-center gap-1 col-span-2 transition-colors">
-            <i class="fa-solid fa-flag-checkered"></i> End Game
+        <!-- Timer Controls (Start/Pause/Resume/Set Time) -->
+        <div class="space-y-2 border border-slate-700/70 bg-slate-900/40 p-3 rounded-xl">
+          <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider">Timer & Game State</h3>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <button id="admin-pause-btn" onclick="adminTogglePause()" class="py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 font-bold text-xs text-slate-950 shadow flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-pause"></i>
+              <span id="admin-pause-btn-text">Pause Game</span>
+            </button>
+            <button onclick="adminStartGame()" class="py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 font-bold text-xs text-slate-950 shadow flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-play"></i>
+              <span>Start/Restart</span>
+            </button>
+          </div>
+
+          <!-- Edit Elapsed Time -->
+          <div class="flex items-center gap-2 pt-2 border-t border-slate-800">
+            <input type="number" id="admin-elapsed-input" placeholder="Mins" min="0" class="w-24 bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white text-center focus:outline-none focus:border-cyan-400">
+            <button onclick="adminModifyElapsedTime()" class="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold text-xs rounded-lg border border-slate-600">
+              Set Elapsed Minutes
+            </button>
+          </div>
+        </div>
+
+        <!-- Team Chip Balance Editor -->
+        <div class="space-y-2 border border-slate-700/70 bg-slate-900/40 p-3 rounded-xl">
+          <h3 class="text-xs font-bold text-amber-400 uppercase tracking-wider">Edit Team Balances</h3>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[10px] text-orange-400 font-bold mb-1">Sureman Chips</label>
+              <input type="number" id="admin-chips-sureman" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white font-bold text-center" min="0">
+            </div>
+            <div>
+              <label class="block text-[10px] text-green-400 font-bold mb-1">Yeung Chips</label>
+              <input type="number" id="admin-chips-yeung" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white font-bold text-center" min="0">
+            </div>
+          </div>
+          <button onclick="adminSaveBalances()" class="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-xs rounded-lg border border-amber-500/40 mt-1">
+            Update Team Balances
           </button>
         </div>
 
-        <!-- Time Controls -->
-        <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-          <h3 class="text-xs font-bold text-slate-300 mb-2 flex items-center"><i class="fa-solid fa-clock text-cyan-400 mr-1.5"></i> Edit Elapsed Time</h3>
+        <!-- Neutralize Station Dropdown -->
+        <div class="space-y-2 border border-slate-700/70 bg-slate-900/40 p-3 rounded-xl">
+          <h3 class="text-xs font-bold text-rose-400 uppercase tracking-wider">Neutralize Station</h3>
           <div class="flex gap-2">
-            <input type="number" id="admin-elapsed-mins-input" placeholder="Minutes" class="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-white text-xs font-mono text-center focus:border-cyan-400 focus:outline-none">
-            <button onclick="adminSetElapsedTime()" class="bg-cyan-600 hover:bg-cyan-700 text-white text-xs px-3 py-1.5 rounded font-bold shadow transition-colors">Set Mins</button>
-          </div>
-        </div>
-
-        <!-- Balance Controls -->
-        <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
-          <h3 class="text-xs font-bold text-slate-300 flex items-center"><i class="fa-solid fa-coins text-amber-400 mr-1.5"></i> Edit Balances</h3>
-          <div class="flex items-center gap-2">
-            <span class="text-orange-400 font-bold text-xs w-16 uppercase tracking-wider">Sureman</span>
-            <input type="number" id="admin-sureman-chips" class="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-white text-xs font-mono text-center focus:border-orange-400 focus:outline-none">
-            <button onclick="adminUpdateChips('Sureman')" class="bg-orange-600 hover:bg-orange-700 text-white text-[10px] px-3 py-1.5 rounded font-bold shadow transition-colors">Set</button>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-green-400 font-bold text-xs w-16 uppercase tracking-wider">Yeung</span>
-            <input type="number" id="admin-yeung-chips" class="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-white text-xs font-mono text-center focus:border-green-400 focus:outline-none">
-            <button onclick="adminUpdateChips('Yeung')" class="bg-green-600 hover:bg-green-700 text-white text-[10px] px-3 py-1.5 rounded font-bold shadow transition-colors">Set</button>
-          </div>
-        </div>
-
-        <!-- Challenges Management -->
-        <div class="p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-          <h3 class="text-xs font-bold text-slate-300 mb-2 flex items-center"><i class="fa-solid fa-bolt text-purple-400 mr-1.5"></i> Manage Challenges (Max 7)</h3>
-          <div class="flex gap-2 mb-3">
-            <select id="admin-add-challenge-select" class="flex-1 bg-slate-900 border border-slate-600 rounded px-1 py-1.5 text-white text-xs truncate max-w-[200px] focus:border-purple-400 focus:outline-none">
-              <!-- JS -->
+            <select id="admin-neutralize-select" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-rose-400">
+              <option value="">Select a Station...</option>
             </select>
-            <button onclick="adminActivateChallenge()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] px-3 py-1.5 rounded font-bold shadow shrink-0 transition-colors">Add</button>
-          </div>
-          <div id="admin-active-challenges-list" class="space-y-2">
-             <!-- JS -->
+            <button onclick="adminNeutralizeSelectedStation()" class="py-1.5 px-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shadow">
+              Neutralize
+            </button>
           </div>
         </div>
 
-        <!-- Danger Zone -->
-        <div class="pt-2 border-t border-slate-700/80">
-          <button onclick="adminResetBoard()" class="w-full py-2.5 rounded-lg bg-rose-600/80 hover:bg-rose-700 font-bold text-xs text-white shadow-lg flex items-center justify-center gap-2 border border-rose-500/50 transition-colors">
-            <i class="fa-solid fa-trash-can"></i> Reset Map & Scores
+        <!-- Manage Active Challenges -->
+        <div class="space-y-2 border border-slate-700/70 bg-slate-900/40 p-3 rounded-xl">
+          <div class="flex justify-between items-center">
+            <h3 class="text-xs font-bold text-cyan-400 uppercase tracking-wider">Manage Active Challenges (<span id="admin-ch-count">0</span>/7)</h3>
+          </div>
+
+          <!-- Manual Activate Challenge -->
+          <div class="flex gap-2 pt-1">
+            <select id="admin-available-ch-select" class="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-400">
+              <option value="">Select challenge to activate...</option>
+            </select>
+            <button onclick="adminActivateChallenge()" class="py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow">
+              + Activate
+            </button>
+          </div>
+
+          <!-- Active Challenges List -->
+          <div id="admin-active-challenges-list" class="space-y-2 max-h-[140px] overflow-y-auto pr-1 pt-2">
+             <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Global Reset & End Game Buttons -->
+        <div class="pt-2 grid grid-cols-2 gap-2">
+          <button onclick="adminEndGame()" class="py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 font-bold text-xs text-white shadow">
+            End Game
+          </button>
+          <button onclick="adminResetBoard()" class="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white shadow">
+            Reset Map & Scores
           </button>
         </div>
       </div>
@@ -466,37 +493,34 @@
     /* =========================================================================
        GAME STATE DATA STRUCTURE
        ========================================================================= */
-    let currentActiveTeam = 'Sureman'; // Default selected team
+    let currentActiveTeam = 'Sureman';
     let selectedChipDeposit = 1;
     let selectedStationId = null;
     let selectedChallengeId = null;
-    let floatingChallengeMarkers = {}; // Tracks custom coordinate challenges
-    
-    // Performance Optimization: Cache to prevent expensive DOM querying and repaints
+    let floatingChallengeMarkers = {};
     let markerRenderCache = {}; 
 
-    // Master state object synced with Firebase
     let gameState = {
       gameStarted: false,
       gameEnded: false,
       isPaused: false,
-      pausedAtHKT: null,
+      pauseTimeHKT: null,
+      accumulatedPausedMs: 0,
       startTimeHKT: null,
       scores: {
         Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
         Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
       },
-      stations: {}, // stationId -> { owner: 'None'|'Sureman'|'Yeung', coins: 0 }
-      activeChallenges: [], // Array of challenge IDs currently active on board (max 7)
-      completedChallenges: [], // Array of challenge IDs cleared
-      failedChallenges: { Sureman: [], Yeung: [] }, // Team failures
-      history: [] // For global undo capability
+      stations: {},
+      activeChallenges: [],
+      completedChallenges: [],
+      failedChallenges: { Sureman: [], Yeung: [] },
+      history: []
     };
 
     function selectTeam(teamName) {
       currentActiveTeam = teamName;
 
-      // Reset styles
       document.getElementById('team-sureman-card').classList.remove('border-orange-500', 'bg-orange-900/30');
       document.getElementById('team-sureman-card').classList.add('border-transparent');
       
@@ -506,7 +530,6 @@
       document.getElementById('sureman-active-badge').classList.add('hidden');
       document.getElementById('yeung-active-badge').classList.add('hidden');
 
-      // Apply active styles
       if (teamName === 'Sureman') {
         document.getElementById('team-sureman-card').classList.remove('border-transparent');
         document.getElementById('team-sureman-card').classList.add('border-orange-500', 'bg-orange-900/30');
@@ -528,14 +551,17 @@
         completedChallenges: [...(gameState.completedChallenges || [])],
         failedChallenges: JSON.parse(JSON.stringify(gameState.failedChallenges || { Sureman: [], Yeung: [] })),
         isPaused: gameState.isPaused,
-        pausedAtHKT: gameState.pausedAtHKT,
-        startTimeHKT: gameState.startTimeHKT
+        accumulatedPausedMs: gameState.accumulatedPausedMs
       };
       gameState.history.push(snapshot);
       if (gameState.history.length > 10) gameState.history.shift(); 
     }
 
     function executeUndo() {
+      if (gameState.isPaused) {
+        showToast("Cannot perform undo while the game is paused!");
+        return;
+      }
       if (!gameState.history || gameState.history.length === 0) {
         showToast("Nothing to undo!");
         return;
@@ -547,18 +573,10 @@
       gameState.activeChallenges = snapshot.activeChallenges;
       gameState.completedChallenges = snapshot.completedChallenges;
       gameState.failedChallenges = snapshot.failedChallenges;
-      
-      if (snapshot.hasOwnProperty('isPaused')) gameState.isPaused = snapshot.isPaused;
-      if (snapshot.hasOwnProperty('pausedAtHKT')) gameState.pausedAtHKT = snapshot.pausedAtHKT;
-      if (snapshot.hasOwnProperty('startTimeHKT')) gameState.startTimeHKT = snapshot.startTimeHKT;
+      if (snapshot.isPaused !== undefined) gameState.isPaused = snapshot.isPaused;
+      if (snapshot.accumulatedPausedMs !== undefined) gameState.accumulatedPausedMs = snapshot.accumulatedPausedMs;
 
       showToast("Undid action: " + snapshot.actionName);
-      
-      // Auto-refresh admin panel if it's currently open
-      if (isAdminUnlocked && !document.getElementById('admin-modal').classList.contains('hidden')) {
-         refreshAdminPanel();
-      }
-      
       recalculateScoresAndRender();
       syncGameStateToFirebase();
     }
@@ -698,7 +716,6 @@
         { id: "Po-Lam", name: "Po Lam", lat: 22.3225, lng: 114.2578 },
         { id: "LOHAS-Park", name: "LOHAS Park", lat: 22.2953, lng: 114.2689 }
       ]},
-      /* Custom Bus Lines */
       "Tuen Tsuen Line": { color: "#E01B84", stations: [
         { id: "Tuen-Mun", name: "Tuen Mun", lat: 22.3952, lng: 113.9728 },
         { id: "Gold-Coast", name: "Gold Coast", lat: 22.3714, lng: 113.9928 },
@@ -756,7 +773,7 @@
     };
 
     /* =========================================================================
-       CHALLENGE DATABASE (Station, Title, Desc, Type, Reward)
+       CHALLENGE DATABASE
        ========================================================================= */
     const CHALLENGES_DATABASE = [
       { id: "CH-01", locationName: "Hong Kong Science Museum", lat: 22.3010, lng: 114.1774, title: "FIND THIS THING", desc: "Ask the judges a photo, and find that thing. You may not use your phone to navigate. Upon entry, If you don't find it within 10mins, this challenge is failed.", type: "Fixed Reward", reward: 15 },
@@ -792,20 +809,19 @@
       { id: "CH-31", locationName: "Happy Valley Tram Terminus", lat: 22.2698, lng: 114.1843, title: "Know ball, but in a different way", desc: "Happy Valley has a lot of football grass courts! Before entering the area with the pitch, your team must make a guess on how many football courts currently have people using or playing in it. The people cannot be one of your team. You earn 4 chips per guessed courts.", type: "Variable", reward: 0 },
       { id: "CH-32", locationName: "Carmel Secondary School", lat: 22.3100, lng: 114.1801, title: "Complete a collection of Carmel", desc: "We love carmel. You now have 10 minutes to find 4/6 of the following: a carmel teacher, a carmel student from intellect, virtue, loyalty, trust house (4 separate person), a carmel student wearing school uniform. You cannot enter Carmel Secondary School. You can peek. This challenge will not be available until 3:30.", type: "Fixed Reward", reward: 25 },
       { id: "CH-33", locationName: "Tsuen Wan Government Primary School", lat: 22.3719, lng: 114.1010, title: "Trivia with Principal", desc: "Isaac has prepared 10 questions of trivia for you to answer. It might be in all aspects. You should estimate how many questions out of 10 you can answer before answering the first question. Fun fact: You are next to where Principal used to be, and her eyes will be watching you. You count as travelling to belvedere garden station when you attempt this challenge.", type: "Variable", reward: 0 },
-      { id: "CH-34", stationId: "Shek-Mun", title: "Taste test Haribo", desc: "Buy a pack of Haribo gummies. You have to identify 3/4 gummies flavour with eyes closed. Your teammate will help verify. If you dont have a teammate, facetime Isaac.", type: "Fixed Reward", reward: 25 },
-
+      { id: "CH-34", stationId: "Shek-Mun", title: "Taste test Haribo", desc: "Buy a pack of Haribo gummies. You have to identify 3/4 gummies flavour with eyes closed. Your teammate will help verify. If you dont have a teammate, facetime Isaac.", type: "Fixed Reward", reward: 25 }
     ];
 
     /* =========================================================================
-       MAP INITIALIZATION & MAP MARKER RENDERING
+       MAP INITIALIZATION
        ========================================================================= */
     let map = L.map('map', {
       center: [22.35, 114.15],
       zoom: 11,
       zoomControl: false,
-      preferCanvas: true, 
-      updateWhenZooming: false, 
-      updateWhenIdle: true      
+      preferCanvas: true,
+      updateWhenZooming: false,
+      updateWhenIdle: true
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
@@ -823,7 +839,6 @@
 
       lineNames.forEach((lineName) => {
         const line = LINES_DATA[lineName];
-        
         const latLngs = line.stations.map(s => [s.lat, s.lng]);
 
         L.polyline(latLngs, {
@@ -835,7 +850,6 @@
 
         line.stations.forEach(st => {
           uniqueStations[st.id] = { ...st, lineName, lineColor: line.color };
-          
           if (!gameState.stations[st.id]) {
             gameState.stations[st.id] = { owner: 'None', coins: 0 };
           }
@@ -872,10 +886,26 @@
 
         stationMapObjects[st.id] = { marker, stationData: st };
       });
+
+      populateNeutralizeDropdown();
+    }
+
+    function populateNeutralizeDropdown() {
+      const select = document.getElementById('admin-neutralize-select');
+      if (!select) return;
+      select.innerHTML = '<option value="">Select a Station...</option>';
+
+      const sorted = Object.values(uniqueStations).sort((a,b) => a.name.localeCompare(b.name));
+      sorted.forEach(st => {
+        const opt = document.createElement('option');
+        opt.value = st.id;
+        opt.innerText = `${st.name} (${st.lineName})`;
+        select.appendChild(opt);
+      });
     }
 
     /* =========================================================================
-       REALTIME CLOCK & HOURLY REWARD SCALING
+       REALTIME CLOCK & ELAPSED TIME ENGINE (WITH PAUSE ACCUMULATION)
        ========================================================================= */
     function updateClockAndElapsed() {
       const now = new Date();
@@ -889,43 +919,42 @@
       });
       document.getElementById('clock-hkt').innerText = hktString;
 
-      const elapsedSpan = document.getElementById('elapsed-time');
+      const pauseIndicator = document.getElementById('pause-indicator');
+      if (gameState.isPaused) {
+        pauseIndicator.classList.remove('hidden');
+      } else {
+        pauseIndicator.classList.add('hidden');
+      }
 
       if (gameState.gameStarted && gameState.startTimeHKT) {
         let diffMs = 0;
-        const nowMs = now.getTime();
-        
-        if (gameState.isPaused && gameState.pausedAtHKT) {
-          const startMs = new Date(gameState.startTimeHKT).getTime();
-          const pausedMs = new Date(gameState.pausedAtHKT).getTime();
-          diffMs = Math.max(0, pausedMs - startMs);
+        const startMs = new Date(gameState.startTimeHKT).getTime();
+        const accPaused = gameState.accumulatedPausedMs || 0;
+
+        if (gameState.isPaused && gameState.pauseTimeHKT) {
+          const pauseMs = new Date(gameState.pauseTimeHKT).getTime();
+          diffMs = Math.max(0, pauseMs - startMs - accPaused);
         } else {
-          const startMs = new Date(gameState.startTimeHKT).getTime();
-          diffMs = Math.max(0, nowMs - startMs);
+          diffMs = Math.max(0, now.getTime() - startMs - accPaused);
         }
 
         const totalSecs = Math.floor(diffMs / 1000);
         const hrs = Math.floor(totalSecs / 3600);
         const mins = Math.floor((totalSecs % 3600) / 60);
         const secs = totalSecs % 60;
-        
-        const formattedTime = `${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
 
-        if (gameState.isPaused) {
-          elapsedSpan.innerText = `PAUSED ${formattedTime}`;
-          elapsedSpan.className = "text-[10px] font-mono text-rose-400 font-bold animate-pulse";
-          document.getElementById('admin-status-text').innerText = "Paused";
-        } else {
-          elapsedSpan.innerText = `Elapsed: ${formattedTime}`;
-          elapsedSpan.className = "text-[10px] font-mono text-amber-400 font-medium";
-          document.getElementById('admin-status-text').innerText = gameState.gameEnded ? "Game Ended" : "Active";
-        }
+        document.getElementById('elapsed-time').innerText = 
+          `Elapsed: ${String(hrs).padStart(2,'0')}:${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
         
         document.getElementById('admin-start-time-text').innerText = 
           new Date(gameState.startTimeHKT).toLocaleTimeString('en-US', { timeZone: 'Asia/Hong_Kong', hour12: false });
+        
+        let statusText = "Active";
+        if (gameState.isPaused) statusText = "PAUSED";
+        else if (gameState.gameEnded) statusText = "Game Ended";
+        document.getElementById('admin-status-text').innerText = statusText;
       } else {
-        elapsedSpan.innerText = "Elapsed: 00:00:00";
-        elapsedSpan.className = "text-[10px] font-mono text-amber-400 font-medium";
+        document.getElementById('elapsed-time').innerText = "Elapsed: 00:00:00";
         document.getElementById('admin-start-time-text').innerText = "Not Started";
         document.getElementById('admin-status-text').innerText = "Not Started";
       }
@@ -935,13 +964,17 @@
 
     function getHourlyChallengeBonus() {
       if (!gameState.gameStarted || !gameState.startTimeHKT) return 0;
+      let diffMs = 0;
       const startMs = new Date(gameState.startTimeHKT).getTime();
+      const accPaused = gameState.accumulatedPausedMs || 0;
+
+      if (gameState.isPaused && gameState.pauseTimeHKT) {
+        diffMs = Math.max(0, new Date(gameState.pauseTimeHKT).getTime() - startMs - accPaused);
+      } else {
+        diffMs = Math.max(0, Date.now() - startMs - accPaused);
+      }
       
-      const endMs = (gameState.isPaused && gameState.pausedAtHKT) 
-                    ? new Date(gameState.pausedAtHKT).getTime() 
-                    : Date.now();
-                    
-      const elapsedHours = Math.floor((endMs - startMs) / (1000 * 60 * 60));
+      const elapsedHours = Math.floor(diffMs / (1000 * 60 * 60));
       return Math.max(0, elapsedHours * 2);
     }
 
@@ -953,9 +986,8 @@
         showToast("The game has not started yet!");
         return;
       }
-      
-      if (gameState.isPaused && !isAdminUnlocked) {
-        showToast("Game is currently paused!");
+      if (gameState.isPaused) {
+        showToast("Game is currently PAUSED by Admin!");
         return;
       }
 
@@ -993,12 +1025,13 @@
       } else {
         modalChallengeBtn.classList.add('hidden');
       }
-      
-      const modalAdminNeutralizeBtn = document.getElementById('modal-admin-neutralize-btn');
+
+      // Show Admin Neutralize button if admin is unlocked
+      const adminNeutBtn = document.getElementById('modal-admin-neutralize-btn');
       if (isAdminUnlocked) {
-        modalAdminNeutralizeBtn.classList.remove('hidden');
+        adminNeutBtn.classList.remove('hidden');
       } else {
-        modalAdminNeutralizeBtn.classList.add('hidden');
+        adminNeutBtn.classList.add('hidden');
       }
 
       selectChipAmount(1);
@@ -1029,6 +1062,10 @@
     }
 
     function confirmDepositChips() {
+      if (gameState.isPaused) {
+        showToast("Game is currently PAUSED by Admin!");
+        return;
+      }
       if (!selectedStationId) return;
 
       const team = currentActiveTeam;
@@ -1054,33 +1091,19 @@
       recalculateScoresAndRender();
       syncGameStateToFirebase();
     }
-    
-    function adminNeutralizeCurrentStation() {
-      if (!selectedStationId) return;
-      showConfirm("Neutralize Station?", "Reset this station to Unclaimed and 0 chips?", () => {
-        pushUndoState(`Admin neutralized ${uniqueStations[selectedStationId].name}`);
-        gameState.stations[selectedStationId] = { owner: 'None', coins: 0 };
-        closeModal('station-modal');
-        recalculateScoresAndRender();
-        syncGameStateToFirebase();
-        showToast("Station neutralized.");
-      });
-    }
 
     /* =========================================================================
-       SCOREBOARD & LINE CONTROL BONUS SYSTEM
+       SCOREBOARD & RENDER SYSTEM
        ========================================================================= */
     function recalculateScoresAndRender() {
       let controlled = { Sureman: 0, Yeung: 0 };
       let lineBonuses = { Sureman: 0, Yeung: 0 };
 
-      // Count station ownership
       Object.keys(gameState.stations).forEach(stId => {
         const owner = gameState.stations[stId].owner;
         if (owner === 'Sureman' || owner === 'Yeung') controlled[owner]++;
       });
 
-      // Check full line control
       Object.keys(LINES_DATA).forEach(lineName => {
         const line = LINES_DATA[lineName];
         let lineOwners = line.stations.map(st => gameState.stations[st.id]?.owner || 'None');
@@ -1090,20 +1113,17 @@
         if (allYeung) lineBonuses.Yeung += 3;
       });
 
-      // Update state scores
       ['Sureman', 'Yeung'].forEach(t => {
         gameState.scores[t].stationsControlled = controlled[t];
         gameState.scores[t].lineBonuses = lineBonuses[t];
         gameState.scores[t].totalScore = controlled[t] + lineBonuses[t];
       });
 
-      // Update UI elements
       document.getElementById('score-sureman').innerText = gameState.scores.Sureman.totalScore;
       document.getElementById('chips-sureman').innerText = gameState.scores.Sureman.chips;
       document.getElementById('score-yeung').innerText = gameState.scores.Yeung.totalScore;
       document.getElementById('chips-yeung').innerText = gameState.scores.Yeung.chips;
 
-      // Render elements smartly via cache
       renderMapMarkers();
       renderFloatingChallenges();
     }
@@ -1119,7 +1139,6 @@
         if (markerObj) {
           const el = document.getElementById(`marker-circle-${stId}`);
           if (el) {
-            // Find if challenge active
             const activeChId = gameState.activeChallenges.find(chId => {
               const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
               if (!ch) return false;
@@ -1128,14 +1147,11 @@
               return ch.stationId === stId || (chStData && currentStData && chStData.lat === currentStData.lat && chStData.lng === currentStData.lng);
             });
 
-            // OPTIMIZATION: State caching to avoid repaints
             const stateSignature = `${stState.owner}-${stState.coins}-${isGameActive ? activeChId : 'none'}-${activeChId ? bonus : 0}`;
-            if (markerRenderCache[stId] === stateSignature) return; // Unchanged, skip DOM updates!
+            if (markerRenderCache[stId] === stateSignature) return; 
             
-            // Register new state
             markerRenderCache[stId] = stateSignature;
 
-            // DOM Updates 
             const textSpan = el.querySelector('.station-coin-text');
             if (textSpan) textSpan.innerText = stState.coins || '0';
             
@@ -1174,13 +1190,13 @@
               existingBadge.onclick = (e) => {
                 e.stopPropagation();
                 if (!gameState.gameStarted) { showToast("Game has not started yet!"); return; }
+                if (gameState.isPaused) { showToast("Game is currently PAUSED by Admin!"); return; }
                 openChallengeModal(activeChId);
               };
             } else if (existingBadge) {
               existingBadge.remove();
             }
           } else {
-            // Marker off-screen / DOM removed by Leaflet; clear cache so it resets when panned into view
             delete markerRenderCache[stId];
           }
         }
@@ -1188,7 +1204,6 @@
     }
 
     function renderFloatingChallenges() {
-      // OPTIMIZATION: Only diff map additions/removals instead of tearing all down
       if (!gameState.gameStarted && !gameState.gameEnded) return;
 
       const activeFloatingIds = {};
@@ -1198,7 +1213,6 @@
         if (ch && ch.lat && ch.lng) {
           activeFloatingIds[chId] = true;
 
-          // If not currently rendered, create it
           if (!floatingChallengeMarkers[chId]) {
             let badgeColor = 'bg-red-500'; 
             let iconHtml = '<i class="fa-solid fa-bolt"></i>';
@@ -1215,17 +1229,14 @@
                iconHtml = `<i class="fa-solid fa-mask text-[12px]"></i>`;
             }
 
-            // Create wrapper matching the station styling for labels
             const wrapper = document.createElement('div');
             wrapper.className = 'relative flex flex-col items-center justify-center';
 
-            // Create the badge icon
             const badge = document.createElement('div');
             badge.className = `challenge-badge ${badgeColor} relative z-40 cursor-pointer w-8 h-8 flex items-center justify-center shadow-[0_0_15px_rgba(0,0,0,0.8)] border border-white/50`;
             badge.style.animation = "pulse 2s infinite";
             badge.innerHTML = iconHtml;
 
-            // Create the location label
             const label = document.createElement('div');
             label.className = 'absolute top-9 text-[10px] font-bold text-cyan-400 whitespace-nowrap z-30 px-1.5 py-0.5 rounded bg-slate-900/95 border border-cyan-500/50 pointer-events-none drop-shadow-md';
             label.innerHTML = `<i class="fa-solid fa-location-dot mr-1 text-[8px]"></i>${ch.locationName || 'Custom Location'}`;
@@ -1236,18 +1247,20 @@
             const customIcon = L.divIcon({
               html: wrapper,
               className: '',
-              iconSize: [32, 55], // Increased height to accommodate the label below
+              iconSize: [32, 55],
               iconAnchor: [16, 16]
             });
 
             const marker = L.marker([ch.lat, ch.lng], { icon: customIcon }).addTo(map);
-            marker.on('click', () => openChallengeModal(chId));
+            marker.on('click', () => {
+              if (gameState.isPaused) { showToast("Game is currently PAUSED by Admin!"); return; }
+              openChallengeModal(chId);
+            });
             floatingChallengeMarkers[chId] = marker;
           }
         }
       });
 
-      // Cleanup resolved floating challenges
       Object.keys(floatingChallengeMarkers).forEach(existingId => {
         if (!activeFloatingIds[existingId]) {
           map.removeLayer(floatingChallengeMarkers[existingId]);
@@ -1267,6 +1280,7 @@
 
       let spawned = 0;
       for (let i = 0; i < countToSpawn && remainingPool.length > 0; i++) {
+        if (gameState.activeChallenges.length >= 7) break;
         const randomIndex = Math.floor(Math.random() * remainingPool.length);
         const nextCh = remainingPool.splice(randomIndex, 1)[0];
         gameState.activeChallenges.push(nextCh.id);
@@ -1276,11 +1290,10 @@
     }
 
     function openChallengeModal(chId) {
-      if (gameState.isPaused && !isAdminUnlocked) {
-        showToast("Game is currently paused!");
+      if (gameState.isPaused) {
+        showToast("Game is currently PAUSED by Admin!");
         return;
       }
-
       selectedChallengeId = chId;
       const ch = CHALLENGES_DATABASE.find(c => c.id === chId);
       if (!ch) return;
@@ -1339,6 +1352,10 @@
     }
 
     function resolveChallenge(action) {
+      if (gameState.isPaused) {
+        showToast("Game is currently PAUSED by Admin!");
+        return;
+      }
       if (!selectedChallengeId) return;
 
       const chId = selectedChallengeId;
@@ -1379,8 +1396,23 @@
 
       } else if (action === 'FAIL') {
         if (!gameState.failedChallenges[team]) gameState.failedChallenges[team] = [];
-        gameState.failedChallenges[team].push(chId);
-        showToast(`${team} failed challenge. Opponent reward boosted to 150%!`);
+        if (!gameState.failedChallenges[team].includes(chId)) {
+          gameState.failedChallenges[team].push(chId);
+        }
+
+        const bothFailed = gameState.failedChallenges.Sureman?.includes(chId) && gameState.failedChallenges.Yeung?.includes(chId);
+
+        if (bothFailed) {
+          // Both teams failed this challenge: remove permanently, place in completed pool, and spawn a replacement
+          gameState.activeChallenges = gameState.activeChallenges.filter(id => id !== chId);
+          if (!gameState.completedChallenges.includes(chId)) {
+            gameState.completedChallenges.push(chId);
+          }
+          spawnChallenges(1);
+          showToast(`Both teams failed "${ch.title}"! Challenge permanently discarded and replaced.`);
+        } else {
+          showToast(`${team} failed challenge. Opponent reward boosted to 150%!`);
+        }
       }
 
       closeModal('challenge-modal');
@@ -1411,7 +1443,7 @@
       if (isAdminUnlocked) {
         document.getElementById('admin-passcode-view').classList.add('hidden');
         document.getElementById('admin-controls-view').classList.remove('hidden');
-        refreshAdminPanel();
+        populateAdminPanelControls();
       } else {
         document.getElementById('admin-passcode-input').value = '';
         document.getElementById('admin-passcode-view').classList.remove('hidden');
@@ -1426,56 +1458,134 @@
         isAdminUnlocked = true;
         document.getElementById('admin-passcode-view').classList.add('hidden');
         document.getElementById('admin-controls-view').classList.remove('hidden');
-        refreshAdminPanel();
+        populateAdminPanelControls();
       } else {
         showToast("Incorrect passcode!");
       }
     }
-    
-    function refreshAdminPanel() {
-      if (!isAdminUnlocked) return;
-      
-      // Update UI states based on Game State
+
+    function populateAdminPanelControls() {
+      // Pause button UI
       const pauseBtn = document.getElementById('admin-pause-btn');
+      const pauseText = document.getElementById('admin-pause-btn-text');
       if (gameState.isPaused) {
-        pauseBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span id="admin-pause-btn-text">Resume</span>';
-        pauseBtn.className = 'py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 font-bold text-xs text-slate-950 shadow-lg flex flex-col items-center justify-center gap-1 transition-colors';
+        pauseBtn.className = "py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-600 font-bold text-xs text-slate-950 shadow flex items-center justify-center gap-1.5";
+        pauseText.innerText = "Resume Game";
       } else {
-        pauseBtn.innerHTML = '<i class="fa-solid fa-pause"></i> <span id="admin-pause-btn-text">Pause</span>';
-        pauseBtn.className = 'py-2.5 rounded-lg bg-purple-500 hover:bg-purple-600 font-bold text-xs text-slate-950 shadow-lg flex flex-col items-center justify-center gap-1 transition-colors';
+        pauseBtn.className = "py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 font-bold text-xs text-slate-950 shadow flex items-center justify-center gap-1.5";
+        pauseText.innerText = "Pause Game";
       }
 
-      document.getElementById('admin-sureman-chips').value = gameState.scores.Sureman.chips;
-      document.getElementById('admin-yeung-chips').value = gameState.scores.Yeung.chips;
-      
-      if (gameState.startTimeHKT) {
-        const nowMs = gameState.isPaused ? new Date(gameState.pausedAtHKT).getTime() : new Date().getTime();
-        const startMs = new Date(gameState.startTimeHKT).getTime();
-        const diffMs = Math.max(0, nowMs - startMs);
-        document.getElementById('admin-elapsed-mins-input').value = Math.floor(diffMs / 60000);
-      }
-      
-      populateAdminChallenges();
+      // Populate balances
+      document.getElementById('admin-chips-sureman').value = gameState.scores.Sureman.chips;
+      document.getElementById('admin-chips-yeung').value = gameState.scores.Yeung.chips;
+
+      // Populate active challenges
+      populateAdminActiveChallenges();
+      // Populate available challenges select
+      populateAdminAvailableChallengesSelect();
     }
 
-    function populateAdminChallenges() {
-      // Setup the Inactive Challenge Dropdown
-      const select = document.getElementById('admin-add-challenge-select');
-      select.innerHTML = '<option value="">-- Select Challenge --</option>';
+    function adminTogglePause() {
+      pushUndoState(gameState.isPaused ? "Admin Resumed Game" : "Admin Paused Game");
       
-      CHALLENGES_DATABASE.forEach(ch => {
-        if (!gameState.activeChallenges.includes(ch.id) && !gameState.completedChallenges.includes(ch.id)) {
-          const opt = document.createElement('option');
-          opt.value = ch.id;
-          opt.text = `${ch.id}: ${ch.title}`;
-          select.appendChild(opt);
+      if (!gameState.isPaused) {
+        gameState.isPaused = true;
+        gameState.pauseTimeHKT = new Date().toISOString();
+        showToast("Game PAUSED! User interactions locked.");
+      } else {
+        gameState.isPaused = false;
+        if (gameState.pauseTimeHKT) {
+          const pauseDuration = Date.now() - new Date(gameState.pauseTimeHKT).getTime();
+          gameState.accumulatedPausedMs = (gameState.accumulatedPausedMs || 0) + pauseDuration;
+          gameState.pauseTimeHKT = null;
         }
-      });
+        showToast("Game RESUMED!");
+      }
 
-      // Update the Active List
+      populateAdminPanelControls();
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    function adminModifyElapsedTime() {
+      const inputVal = parseInt(document.getElementById('admin-elapsed-input').value);
+      if (isNaN(inputVal) || inputVal < 0) {
+        showToast("Please enter a valid number of minutes.");
+        return;
+      }
+
+      pushUndoState(`Admin set elapsed time to ${inputVal} minutes`);
+      
+      const targetMs = inputVal * 60000;
+      const nowMs = Date.now();
+      
+      gameState.accumulatedPausedMs = 0;
+      if (gameState.isPaused) {
+        gameState.pauseTimeHKT = new Date(nowMs).toISOString();
+      }
+      gameState.startTimeHKT = new Date(nowMs - targetMs).toISOString();
+
+      showToast(`Elapsed time set to ${inputVal} minutes!`);
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    function adminSaveBalances() {
+      const sChips = parseInt(document.getElementById('admin-chips-sureman').value);
+      const yChips = parseInt(document.getElementById('admin-chips-yeung').value);
+
+      if (isNaN(sChips) || isNaN(yChips)) {
+        showToast("Please enter valid chip amounts.");
+        return;
+      }
+
+      pushUndoState("Admin updated team chip balances");
+      gameState.scores.Sureman.chips = Math.max(0, sChips);
+      gameState.scores.Yeung.chips = Math.max(0, yChips);
+
+      showToast("Team chip balances updated!");
+      recalculateScoresAndRender();
+      syncGameStateToFirebase();
+    }
+
+    function adminNeutralizeSelectedStation() {
+      const select = document.getElementById('admin-neutralize-select');
+      const stId = select.value;
+      if (!stId) {
+        showToast("Please select a station to neutralize.");
+        return;
+      }
+      adminNeutralizeStation(stId);
+    }
+
+    function adminNeutralizeCurrentStation() {
+      if (selectedStationId) {
+        adminNeutralizeStation(selectedStationId);
+        closeModal('station-modal');
+      }
+    }
+
+    function adminNeutralizeStation(stId) {
+      showConfirm("Neutralize Station?", `Reset ${uniqueStations[stId]?.name || stId} to Unclaimed with 0 chips?`, () => {
+        pushUndoState(`Neutralized station ${stId}`);
+        gameState.stations[stId] = { owner: 'None', coins: 0 };
+        showToast(`Station ${uniqueStations[stId]?.name} neutralized!`);
+        recalculateScoresAndRender();
+        syncGameStateToFirebase();
+      });
+    }
+
+    function populateAdminActiveChallenges() {
       const listContainer = document.getElementById('admin-active-challenges-list');
-      if (!gameState.activeChallenges || gameState.activeChallenges.length === 0) {
-        listContainer.innerHTML = '<div class="text-[10px] text-slate-500 italic py-2 text-center border border-slate-700/50 rounded-lg">No active challenges.</div>';
+      const countLabel = document.getElementById('admin-ch-count');
+      if (!listContainer) return;
+      
+      const activeCount = gameState.activeChallenges ? gameState.activeChallenges.length : 0;
+      if (countLabel) countLabel.innerText = activeCount;
+
+      if (activeCount === 0) {
+        listContainer.innerHTML = '<div class="text-[10px] text-slate-500 italic py-2 text-center">No active challenges.</div>';
         return;
       }
 
@@ -1491,103 +1601,94 @@
             <div class="text-[10px] font-bold text-cyan-400">${chId}</div>
             <div class="text-xs text-slate-300 truncate" title="${ch.title}">${ch.title}</div>
           </div>
-          <button onclick="adminDeactivateChallenge('${chId}')" class="shrink-0 px-2.5 py-1.5 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 text-[10px] font-bold rounded border border-rose-500/30 transition-colors shadow-sm">
-            <i class="fa-solid fa-xmark mr-1"></i> Deactivate
-          </button>
+          <div class="flex gap-1">
+            <button onclick="adminSwapChallenge('${chId}')" class="shrink-0 px-2 py-1 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 text-[10px] font-bold rounded border border-amber-500/30">
+              Swap
+            </button>
+            <button onclick="adminDeactivateChallenge('${chId}')" class="shrink-0 px-2 py-1 bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 text-[10px] font-bold rounded border border-rose-500/30">
+              Deactivate
+            </button>
+          </div>
         `;
         listContainer.appendChild(item);
       });
     }
 
+    function populateAdminAvailableChallengesSelect() {
+      const select = document.getElementById('admin-available-ch-select');
+      if (!select) return;
+
+      const inactive = CHALLENGES_DATABASE.filter(c => 
+        !gameState.activeChallenges.includes(c.id) && 
+        !gameState.completedChallenges.includes(c.id)
+      );
+
+      select.innerHTML = '<option value="">Select challenge to activate...</option>';
+      inactive.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.innerText = `[${c.id}] ${c.title}`;
+        select.appendChild(opt);
+      });
+    }
+
     function adminActivateChallenge() {
-      const select = document.getElementById('admin-add-challenge-select');
+      const select = document.getElementById('admin-available-ch-select');
       const chId = select.value;
       if (!chId) {
-        showToast("Please select a challenge first.");
+        showToast("Select a challenge to activate.");
         return;
       }
 
       if (gameState.activeChallenges.length >= 7) {
-        showToast("Maximum of 7 challenges can be active!");
+        showToast("Maximum of 7 active challenges reached!");
         return;
       }
 
-      pushUndoState(`Admin activated challenge ${chId}`);
+      pushUndoState(`Admin manually activated challenge ${chId}`);
       gameState.activeChallenges.push(chId);
-      refreshAdminPanel();
+
+      showToast(`Challenge ${chId} activated on map!`);
+      populateAdminPanelControls();
       recalculateScoresAndRender();
       syncGameStateToFirebase();
-      showToast("Challenge activated!");
     }
 
     function adminDeactivateChallenge(chId) {
       pushUndoState(`Admin deactivated challenge ${chId}`);
       gameState.activeChallenges = gameState.activeChallenges.filter(id => id !== chId);
-      refreshAdminPanel();
+
+      showToast(`Challenge ${chId} deactivated.`);
+      populateAdminPanelControls();
       recalculateScoresAndRender();
       syncGameStateToFirebase();
-      showToast("Challenge deactivated.");
     }
-    
-    function adminTogglePause() {
-      if (!gameState.gameStarted || gameState.gameEnded) return;
-      pushUndoState(gameState.isPaused ? "Admin Resumed Game" : "Admin Paused Game");
-      
-      if (gameState.isPaused) {
-        const nowMs = new Date().getTime();
-        const pausedMs = new Date(gameState.pausedAtHKT).getTime();
-        const pauseDuration = nowMs - pausedMs;
-        const startMs = new Date(gameState.startTimeHKT).getTime();
+
+    function adminSwapChallenge(oldChId) {
+      showConfirm("Swap Challenge?", "Replace this challenge with a random available one?", () => {
+        const remainingPool = CHALLENGES_DATABASE.filter(c => 
+          !gameState.activeChallenges.includes(c.id) && 
+          !gameState.completedChallenges.includes(c.id)
+        );
+
+        if (remainingPool.length === 0) {
+          showToast("No available challenges left in the pool!");
+          return;
+        }
+
+        pushUndoState("Admin Swapped Challenge");
+
+        gameState.activeChallenges = gameState.activeChallenges.filter(id => id !== oldChId);
         
-        gameState.startTimeHKT = new Date(startMs + pauseDuration).toISOString();
-        gameState.isPaused = false;
-        gameState.pausedAtHKT = null;
-        showToast("Game Resumed!");
-      } else {
-        gameState.isPaused = true;
-        gameState.pausedAtHKT = new Date().toISOString();
-        showToast("Game Paused!");
-      }
-      
-      refreshAdminPanel();
-      syncGameStateToFirebase();
-    }
-    
-    function adminSetElapsedTime() {
-      const minsStr = document.getElementById('admin-elapsed-mins-input').value;
-      const mins = parseInt(minsStr);
-      if (isNaN(mins) || mins < 0) return;
-      
-      pushUndoState("Admin Edited Time");
-      
-      const targetDiffMs = mins * 60000;
-      
-      if (gameState.isPaused && gameState.pausedAtHKT) {
-        const pausedMs = new Date(gameState.pausedAtHKT).getTime();
-        gameState.startTimeHKT = new Date(pausedMs - targetDiffMs).toISOString();
-      } else {
-        const nowMs = new Date().getTime();
-        gameState.startTimeHKT = new Date(nowMs - targetDiffMs).toISOString();
-      }
-      
-      showToast(`Elapsed time set to ${mins} minutes.`);
-      refreshAdminPanel();
-      recalculateScoresAndRender();
-      syncGameStateToFirebase();
-    }
-    
-    function adminUpdateChips(team) {
-      const inputEl = document.getElementById(`admin-${team.toLowerCase()}-chips`);
-      if (!inputEl) return;
-      const val = parseInt(inputEl.value);
-      if (isNaN(val) || val < 0) return;
-      
-      pushUndoState(`Admin updated ${team} chips to ${val}`);
-      gameState.scores[team].chips = val;
-      
-      showToast(`Updated ${team} chips to ${val}`);
-      recalculateScoresAndRender();
-      syncGameStateToFirebase();
+        const randomIndex = Math.floor(Math.random() * remainingPool.length);
+        const newCh = remainingPool[randomIndex];
+        gameState.activeChallenges.push(newCh.id);
+
+        showToast("Challenge swapped successfully!");
+        populateAdminPanelControls();
+        recalculateScoresAndRender();
+        syncGameStateToFirebase();
+      });
     }
 
     function adminStartGame() {
@@ -1595,15 +1696,12 @@
       gameState.gameStarted = true;
       gameState.gameEnded = false;
       gameState.isPaused = false;
-      gameState.pausedAtHKT = null;
+      gameState.pauseTimeHKT = null;
+      gameState.accumulatedPausedMs = 0;
       gameState.startTimeHKT = new Date().toISOString();
-      
-      if (!gameState.activeChallenges || gameState.activeChallenges.length === 0) {
-         gameState.activeChallenges = ["CH-01", "CH-02", "CH-03"];
-      }
-      
+      gameState.activeChallenges = ["CH-01", "CH-02", "CH-03"];
       showToast("Game Timer Started in HKT!");
-      refreshAdminPanel();
+      populateAdminPanelControls();
       closeModal('admin-modal');
       recalculateScoresAndRender();
       syncGameStateToFirebase();
@@ -1619,15 +1717,15 @@
     }
 
     function adminResetBoard() {
-      showConfirm("Reset Board?", "Are you sure you want to reset the entire map and scores? This cannot be undone easily.", () => {
+      showConfirm("Reset Board?", "Are you sure you want to reset the entire map and scores?", () => {
         pushUndoState("Admin Reset Board");
         
         gameState.gameStarted = false;
         gameState.gameEnded = false;
         gameState.isPaused = false;
-        gameState.pausedAtHKT = null;
+        gameState.pauseTimeHKT = null;
+        gameState.accumulatedPausedMs = 0;
         gameState.startTimeHKT = null;
-        
         gameState.scores = {
           Sureman: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 },
           Yeung: { chips: 10, stationsControlled: 0, lineBonuses: 0, totalScore: 0 }
@@ -1639,11 +1737,10 @@
         gameState.completedChallenges = [];
         gameState.failedChallenges = { Sureman: [], Yeung: [] };
         
-        // OPTIMIZATION: Reset cache strictly for reset map conditions
         markerRenderCache = {};
 
         showToast("Board and Scores Reset successfully!");
-        refreshAdminPanel();
+        populateAdminPanelControls();
         closeModal('admin-modal');
         recalculateScoresAndRender();
         syncGameStateToFirebase();
@@ -1664,17 +1761,13 @@
           user = credential.user;
         }
 
-        if (!user) {
-          console.warn("Authentication failed, Firebase won't sync.");
-          return;
-        }
+        if (!user) return;
         
         gameStateRef.onSnapshot(docSnap => {
           if (docSnap.exists) {
             const data = docSnap.data();
             if (data && data.state) {
               gameState = data.state;
-              if (gameState.isPaused === undefined) gameState.isPaused = false;
               if (!gameState.failedChallenges) gameState.failedChallenges = { Sureman: [], Yeung: [] };
               if (!gameState.history) gameState.history = [];
               if (!gameState.stations) gameState.stations = {};
@@ -1683,11 +1776,8 @@
                 if (!gameState.stations[stId]) gameState.stations[stId] = { owner: 'None', coins: 0 };
               });
               
+              if (isAdminUnlocked) populateAdminPanelControls();
               recalculateScoresAndRender();
-              
-              if (isAdminUnlocked && !document.getElementById('admin-modal').classList.contains('hidden')) {
-                 refreshAdminPanel();
-              }
             }
           } else {
             syncGameStateToFirebase();
@@ -1713,7 +1803,7 @@
 
     function showToast(msg) {
       const toast = document.createElement('div');
-      toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 z-50 glass-panel border border-amber-500/50 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-2xl animate-bounce';
+      toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 z-50 glass-panel border border-amber-500/50 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-2xl animate-bounce text-center';
       toast.innerText = msg;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 2500);
